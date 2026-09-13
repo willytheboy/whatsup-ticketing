@@ -4,11 +4,11 @@ Event tickets for Lebanon, delivered on WhatsApp. One Next.js 14 codebase serves
 
 | Surface | Routes | Deployed as |
 | --- | --- | --- |
-| Consumer app (Discover, event page, checkout, tickets, Live streams + chat, WhatsApp/email sign-in) | `/`, `/e/[slug]`, `/checkout`, `/tickets`, `/t/[code]`, `/live`, `/live/[slug]`, `/login` | Vercel project **whatsup-ticketing** |
+| Consumer app (Discover, event page, checkout, tickets, Live streams + chat, WhatsApp/email sign-in) | `/`, `/e/[slug]`, `/checkout`, `/tickets`, `/t/[code]`, `/live`, `/live/[slug]`, `/login` | Vercel project **whatsup-ticketing-app** (https://whatsup-ticketing-app.vercel.app) |
 | Organiser tools (hub, new/manage event, door scanner, partner finance) | `/org`, `/org/new`, `/org/e/[id]`, `/org/door`, `/org/finance` | same deployment |
-| Back office (orders, double-entry ledger, partners, settlements, invoices, provider reconciliation, revenue-share rules, reports, streams, team, audit) | `/admin/*` | Vercel project **whatsup-backoffice** (root URL redirects to `/admin`) |
+| Back office (orders, double-entry ledger, partners, settlements, invoices, provider reconciliation, revenue-share rules, reports, streams, team, audit) | `/admin/*` | Vercel project **whatsup-backoffice-app** (https://whatsup-backoffice-app.vercel.app, root URL redirects to `/admin`) |
 
-Both Vercel projects build the `app/` directory. The back-office deployment is detected by hostname (`whatsup-backoffice*`) or `NEXT_PUBLIC_APP_ROLE=backoffice`.
+Both Vercel projects build the `app/` directory. The back-office deployment is detected by hostname (`whatsup-backoffice*`, so the legacy `whatsup-backoffice` name works too) or `NEXT_PUBLIC_APP_ROLE=backoffice`.
 
 ## Layout
 

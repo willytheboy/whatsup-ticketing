@@ -4,10 +4,12 @@
 
 | Project | Root directory | Production URL | Notes |
 | --- | --- | --- | --- |
-| `whatsup-ticketing` | `app` | https://whatsup-ticketing.vercel.app | consumer + organiser + `/admin` |
-| `whatsup-backoffice` | `app` | https://whatsup-backoffice.vercel.app | `/` → `/admin` via middleware (hostname match) |
+| `whatsup-ticketing-app` | `app` | https://whatsup-ticketing-app.vercel.app | consumer + organiser + `/admin` (git-linked, project `prj_hMSiQzhwDnqaouNI28lNttxUk4M1`) |
+| `whatsup-backoffice-app` | `app` | https://whatsup-backoffice-app.vercel.app | `/` → `/admin` via middleware (hostname match; git-linked, project `prj_6YWt2L2EgnaEtfR0f78CIun1q3bh`) |
 
-Pushes to `main` on `willytheboy/whatsup-ticketing` deploy both projects. No environment variables are required for a green build; set them to override the defaults in `app/.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_TENANT`, `NEXT_PUBLIC_APP_ROLE`, `NEXT_PUBLIC_BACKOFFICE_URL`).
+Pushes to `main` on `willytheboy/whatsup-ticketing` deploy both projects.
+
+The older manually-deployed projects `whatsup-ticketing` (prj_IhThFJSqR8Ny1r2CFlZCSnrL6fn8) and `whatsup-backoffice` (prj_oVIlFrwPCwvHGgBAMQiiDHNNT2UO) are not git-linked and still hold the short names; delete them in the Vercel dashboard and rename the `-app` projects to reclaim `whatsup-ticketing.vercel.app` / `whatsup-backoffice.vercel.app` (the hostname check in `src/middleware.ts` already covers both names). No environment variables are required for a green build; set them to override the defaults in `app/.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_TENANT`, `NEXT_PUBLIC_APP_ROLE`, `NEXT_PUBLIC_BACKOFFICE_URL`).
 
 ## Supabase
 

@@ -6,7 +6,7 @@ export const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhod21nbmhzcHlhcXNnZ2d2dWpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzMTM0OTgsImV4cCI6MjEwNDg4OTQ5OH0.x54qWu8zFvpcMTaTH-6ai8lN--1RVKhsFGbmErOI-bY";
 export const TENANT = process.env.NEXT_PUBLIC_TENANT ?? "lb";
 export const APP_ROLE = process.env.NEXT_PUBLIC_APP_ROLE ?? "ticketing";
-export const BACKOFFICE_URL = process.env.NEXT_PUBLIC_BACKOFFICE_URL ?? "https://whatsup-backoffice.vercel.app";
+export const BACKOFFICE_URL = process.env.NEXT_PUBLIC_BACKOFFICE_URL ?? "https://whatsup-backoffice-app.vercel.app";
 
 /** Tenant time zone used for every date/time shown to buyers and staff. */
 export const TZ = "Asia/Beirut";
