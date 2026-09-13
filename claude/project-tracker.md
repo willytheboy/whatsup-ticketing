@@ -30,6 +30,14 @@ with `whatsup-backoffice`, so the redirect keeps working after a rename.
 Note for future automation: the Vercel MCP `create_git_project` reuses the first project linked to a repository; the second project was
 created by passing the repository URL with different casing (`WillyTheBoy/whatsup-ticketing`), which GitHub resolves identically.
 
+### Legacy URL bridge (added after the first back-office report)
+
+`https://whatsup-backoffice.vercel.app` (legacy project, not git-linked) now serves a one-file redirect deployment: every path 307s to
+`https://whatsup-backoffice-app.vercel.app`, so the old ticketing app's "Back office" tab and any bookmark land on the real back office.
+Signed-in verification on the live host (headless Chromium, temporary test admin, deleted afterwards): login form → overview with live
+figures → orders, partners, ledger, settlements, team all render; the ticketing app shows the Back office tab for admins.
+Back-office access still requires an account with `super_admin` or `country_admin` in `memberships` (wabunassar@gmail.com has it).
+
 ## What v0.4.0 contains
 
 ```
@@ -79,5 +87,5 @@ docs/               ARCHITECTURE.md, DEPLOYMENT.md
 
 ## Change log
 
-* **rev 19 (2026-09-13)** — repo rebuilt and pushed as v0.4.0; git-linked Vercel projects created and READY; tracker moved into the repo.
+* **rev 19 (2026-09-13)** — repo rebuilt and pushed as v0.4.0; git-linked Vercel projects created and READY; tracker moved into the repo; legacy back-office URL bridged to the new host after a "back office not loading" report.
 * rev 18 and earlier — in the project chat (not recoverable here).
