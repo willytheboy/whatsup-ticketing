@@ -1,16 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, Instrument_Sans, Tajawal } from "next/font/google";
 import Shell from "@/components/Shell";
 import { getLang } from "@/lib/lang-server";
 import "./globals.css";
 
-const display = Bricolage_Grotesque({ subsets: ["latin", "latin-ext"], weight: ["500", "700", "800"], variable: "--font-display", display: "swap" });
-const body = Instrument_Sans({ subsets: ["latin", "latin-ext"], weight: ["400", "500", "600", "700"], variable: "--font-body", display: "swap" });
-const arabic = Tajawal({ subsets: ["arabic", "latin"], weight: ["400", "500", "700", "800"], variable: "--font-ar", display: "swap" });
-
 export const metadata: Metadata = {
-  title: "WhatsUp Tickets",
-  description: "Events in Lebanon, tickets on WhatsApp.",
+  title: "What's Up Lebanon",
+  description: "Everything to do in Lebanon — events, dining, beach, stays, passes. Tickets on WhatsApp.",
 };
 export const viewport: Viewport = {
   width: "device-width",
@@ -18,13 +13,14 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   userScalable: false,
-  themeColor: "#F4F7F1",
+  themeColor: "#639922",
 };
 
+/** System font stack only (brief §3.3): the app must render offline and from a local file on iOS Safari. */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const lang = getLang();
   return (
-    <html lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} className={`${display.variable} ${body.variable} ${arabic.variable}`}>
+    <html lang={lang} dir={lang === "ar" ? "rtl" : "ltr"}>
       <body>
         <Shell>{children}</Shell>
       </body>

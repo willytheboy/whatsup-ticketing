@@ -1,12 +1,13 @@
-/** WhatsUp Lebanon mark: green mountains, red cedar. */
-export default function Logo() {
+/** WhatsUp Lebanon mark: low-poly green landscape, red cedar (brand palette). */
+export default function Logo({ size = 24 }: { size?: number }) {
   return (
-    <svg width="24" height="24" viewBox="0 0 48 48" aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden>
       <circle cx="24" cy="24" r="23" fill="#fff" />
-      <path d="M4 34 L14 22 L21 29 L30 18 L44 34 Z" fill="#1E7A3F" />
-      <path d="M14 22 L21 29 L10 34 Z" fill="#2FA36B" />
-      <path d="M30 18 L44 34 L36 34 Z" fill="#155C2F" />
-      <path d="M24 8 l4 6 -2 0 3 4 -2 0 3 4 -5 0 0 4 -2 0 0-4 -5 0 3-4 -2 0 3-4 -2 0z" fill="#D3302F" />
+      <polygon points="4,34 14,20 24,34" fill="#3B6D11" />
+      <polygon points="14,20 24,34 32,16 20,12" fill="#639922" />
+      <polygon points="24,34 32,16 44,34" fill="#97C459" />
+      <polygon points="35,34 38,20 41,34" fill="#A32D2D" />
+      <polygon points="37,34 38,26 39,34" fill="#E24B4A" />
     </svg>
   );
 }

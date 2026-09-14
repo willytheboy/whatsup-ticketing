@@ -39,7 +39,8 @@ export default function DoorScanner() {
     const r: Scan = data ?? { result: "invalid", reason: error?.message };
     setResult(r);
     setRecent((s) => [{ ...r, at: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) }, ...s].slice(0, 20));
-    setTimeout(() => { setResult(null); busy.current = false; }, 1800);
+    if (r.result === "valid" && navigator.vibrate) navigator.vibrate(80);
+    setTimeout(() => { setResult(null); busy.current = false; }, 2200);
   };
 
   const startCam = async () => {
@@ -67,48 +68,50 @@ export default function DoorScanner() {
 
   return (
     <>
-      <TopBar />
+      <TopBar back="/profile" title={t("doorMode")} />
       <main>
-        <div className="row between">
-          <h3 className="display" style={{ margin: 0, fontSize: 18 }}>{t("doorScanner")}</h3>
-          {events.length > 0 && (
-            <select className="chip" value={eventId} onChange={(e) => setEventId(e.target.value)}>
+        <div className="meta" style={{ marginTop: -4 }}>{t("doorSub")}</div>
+        {events.length > 0 && (
+          <div className="field">
+            <select value={eventId} onChange={(e) => setEventId(e.target.value)}>
               {events.map((e) => <option key={e.event_id} value={e.event_id}>{e.title}</option>)}
             </select>
-          )}
-        </div>
+          </div>
+        )}
         {user === null && (
-          <div className="card stack">
+          <div className="card pad stack">
             <p style={{ margin: 0 }}>{t("signInDoor")}</p>
             <Link href="/login?next=/org/door" className="btn green">{t("signIn")}</Link>
           </div>
         )}
         {user && (
           <>
-            <div className="scanner">
+            <div className="scanbox">
               <video ref={video} muted playsInline />
               <div className="frame" />
-              {result && (
-                <div className={`result ${tone}`}>
-                  {t(result.result === "valid" ? "valid" : result.result === "duplicate" ? "dup" : result.result === "reserved" ? "payFirst" : "invalid")}
-                  <small>
-                    {result.code ?? result.reason}
-                    {result.tier ? ` · ${result.tier}` : ""}
-                    {result.holder ? ` · ${result.holder}` : ""}
-                    {result.seat ? ` · ${result.seat}` : ""}
-                  </small>
-                </div>
-              )}
+              {cam !== "on" && <span className="small" style={{ color: "#fff", position: "absolute" }}>{t("camMsg")}</span>}
             </div>
+            {result && (
+              <div className={`result ${tone}`}>
+                {t(result.result === "valid" ? "valid" : result.result === "duplicate" ? "dup" : result.result === "reserved" ? "payFirst" : "invalid")}
+                {(result as any).kind ? ` · ${t((result as any).kind)}` : ""}{(result as any).repeat ? ` · ${t("member")}` : ""}
+                <small>
+                  {result.code ?? result.reason}
+                  {result.tier ? ` · ${result.tier}` : ""}
+                  {result.holder ? ` · ${result.holder}` : ""}
+                  {result.seat ? ` · ${result.seat}` : ""}
+                </small>
+              </div>
+            )}
             {cam === "idle" && <button className="btn green" onClick={startCam}>{t("startCam")}</button>}
             {cam === "unsupported" && <div className="note">{t("noBD")}</div>}
             <div className="row">
               <div className="field" style={{ flex: 1 }}>
                 <input value={token} onChange={(e) => setToken(e.target.value)} placeholder={t("pasteToken")} />
               </div>
-              <button className="btn ghost sm" onClick={() => { check(token.trim()); setToken(""); }}>{t("check")}</button>
+              <button className="btn line sm" onClick={() => { check(token.trim()); setToken(""); }}>{t("check")}</button>
             </div>
-            <div className="card">
+            <div className="card pad">
               <div className="label" style={{ marginBottom: 4 }}>{t("recent")}</div>
               {recent.length ? (
                 recent.map((r, i) => (

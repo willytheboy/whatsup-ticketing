@@ -66,7 +66,7 @@ export default function Finance() {
       <TopBar back="/org" title={t("finance")} />
       <main>
         {user === null && (
-          <div className="card stack">
+          <div className="card pad stack">
             <p style={{ margin: 0 }}>{t("signInOrg")}</p>
             <Link href="/login?next=/org/finance" className="btn green">{t("signIn")}</Link>
           </div>
@@ -81,16 +81,16 @@ export default function Finance() {
         )}
         {balance && (
           <>
-            <div className="kpis">
+            <div className="kpis three">
               <div className="kpi">
                 <div className="label">{t("balance")}</div>
                 <b className="num" style={{ color: Number(balance.net_balance) < 0 ? "var(--red)" : "var(--green)" }}>{signed(balance.net_balance)}</b>
               </div>
-              <div className="kpi"><div className="label">{t("earned")}</div><b className="num">{signed(balance.payable)}</b></div>
+              <div className="kpi"><div className="label">{t("earnedK")}</div><b className="num">{signed(balance.payable)}</b></div>
               <div className="kpi"><div className="label">{t("cashHeld")}</div><b className="num">{signed(balance.receivable)}</b></div>
             </div>
             <p className="note" style={{ margin: 0 }}>{Number(balance.net_balance) >= 0 ? t("weOwe") : t("youOwe")}</p>
-            <div className="card stack">
+            <div className="card pad stack">
               <div className="row between">
                 <b>{t("statement")}</b>
                 <span className="note num">{fmtDate(from)} → {fmtDate(to)}</span>
@@ -119,7 +119,7 @@ export default function Finance() {
                 <div className="note">{Object.entries(statement.by_stream).map(([k, v]) => `${k}: ${signed(v)}`).join(" · ")}</div>
               )}
             </div>
-            <div className="card">
+            <div className="card pad">
               <div className="label" style={{ marginBottom: 4 }}>{t("payouts")}</div>
               {settlements.length ? (
                 settlements.map((s) => (
@@ -131,7 +131,7 @@ export default function Finance() {
                     <div style={{ textAlign: "end" }}>
                       <div className="num" style={{ fontWeight: 700 }}>{signed(s.amount)}</div>
                       {s.status === "scheduled" && Number(s.amount) > 0 && (
-                        <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={() => request(s.id)}>{t("requestPayout")}</button>
+                        <button className="btn line sm" style={{ marginTop: 4 }} onClick={() => request(s.id)}>{t("requestPayout")}</button>
                       )}
                     </div>
                   </div>
@@ -141,7 +141,7 @@ export default function Finance() {
               )}
             </div>
             {invoices.length > 0 && (
-              <div className="card">
+              <div className="card pad">
                 <div className="label" style={{ marginBottom: 4 }}>{t("invoices")}</div>
                 {invoices.map((inv) => (
                   <div key={inv.id} className="orow">

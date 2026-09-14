@@ -1,5 +1,22 @@
 # WhatsUp Ticketing — project tracker
 
+**Revision 20** · 2026-09-14 · v0.5.0 — design brief v1.0 applied to the live app; monetisation model wired in as the upgrade ladder
+
+## What changed in v0.5.0 (this revision)
+
+* **Design system** (`docs/DESIGN.md`): the Design Brief v1.0 / prototype v0.6 look on every consumer and venue screen — white canvas, cedar greens, rationed red, facet band, system fonts (Google fonts removed), six tabs **Home · Search · Ask · Radio · Vibe · Wallet**, Profile behind the avatar, venue tools behind Profile → Venue (role-gated).
+* **Listings v2** (`supabase/migrations/20260914100000_listings_v2.sql`, applied): `events.kind` (event / venue / stay / pass), `tiers.kind` (ticket / daypass / item / stay / pass) + `member_free` + `plan_months` + `note`, `events.deals`, `events.pinned`, `tickets.valid_until`, `orders.meta`, `venues.lat/lng`, `organisers.plan/plan_until`, `saved_deals`, `moments` (+ private storage bucket), `v_my_organisers`, `v_room_counts`; functions `upgrade_plan`, `buy_promotion`, `event_room`. Demo seed v2 (`supabase/seed/demo_v2.sql`, applied): beach club, dining venue with tables, guest house, Summer Pass with three plans, items, deals, a promoter, two venue stations.
+* **Edge functions** redeployed: `create-order` (fees by kind — tickets 5% + $0.50, day passes/items 5%, stays 4%, tables/passes none; per-tier limits; a valid pass covers `member_free` offers; promoter vs referral code attribution with 10% off a friend's first order; `meta` for party/time/nights/gift; passes get `valid_until`; table-only bookings get a QR), `scan` (member cards scan every visit at any partner venue until expiry; kind in the result).
+* **Buyer screens**: Home (band, city sheet, category rail, featured card = paid placement first, grid, pass promo, #WeAreLebanon), Search, Listing (hero, live meter, room, radio/story, OSM map card, offers with type-specific pickers, gift box, Notify-me waitlist, group booking, total, card / cash), Checkout, Wallet (member card, ticket cards with facet band + QR, coupons with Redeem), Ticket, Story card (9:16 + 1080×1920 PNG).
+* **Experience layer**: `/api/ai` (Claude when `ANTHROPIC_API_KEY` is set, catalogue rules otherwise) → Ask (concierge with OPEN: action chips), Vibe (name, line, day → dinner → night, generated track), Radio (venue stations from `streams` + "Your vibe" station, ticket CTA), Rooms per listing (realtime chat, pinned live info), Your moment (upload to `moments`), Profile (referral code, settings, WhatsApp reminders, venue entry points, back office).
+* **Upgrade ladder** (monetisation model → product): Plans page Free / Pro $49 / Venue with feature gating (promoters need Pro; station, passes, rules need Venue); Promote packages Boost $40 / Story bundle $120 / Takeover $300 per listing → `promotion_orders` (paid, ledger `rev:promotions`) + `featured_until`; promoters page with `?ref=` links, clicks, sales, commission; venue dashboard with KPIs, inventory sell-through by unit, payout waterfall by plan fee, station block; poster-to-listing with type selector and buyer-price / you-receive preview.
+* **Verified locally** (production build, Playwright 390×844, EN + AR): home, listings (beach / dining / event / pass), search, ask, radio, vibe, story, room, wallet, checkout → sandbox card order → ticket (day pass $15 + $0.75 fee), venue dashboard, plans, promoters, new listing, door, promote, profile. `next build` green (41 routes).
+* **Pending after deploy**: set `ANTHROPIC_API_KEY` on the `whatsup-ticketing-app` Vercel project; custom domains; payment partners (unchanged).
+
+---
+
+# Revision 19 (kept for provenance)
+
 **Revision 19** · 2026-09-13 · session https://claude.ai/code/session_01JDd1CsAgTaqWteTAQPrFMW
 
 > Revision 18 lived in the project chat and was not reachable from this session, nor was `whatsup-ticketing-repo.zip`.

@@ -28,10 +28,10 @@ export default function LoginForm({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="card stack">
-      <div className="row" style={{ gap: 6 }}>
-        <button className={`chip ${mode === "email" ? "on" : ""}`} onClick={() => setMode("email")}>{t("email")}</button>
-        <button className={`chip ${mode === "phone" ? "on" : ""}`} onClick={() => setMode("phone")}>WhatsApp</button>
+    <div className="card pad stack">
+      <div className="seg">
+        <button className={mode === "email" ? "on" : ""} onClick={() => setMode("email")}>{t("email")}</button>
+        <button className={mode === "phone" ? "on" : ""} onClick={() => setMode("phone")}>WhatsApp</button>
       </div>
       {mode === "phone" ? (
         sent ? (

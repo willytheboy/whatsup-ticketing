@@ -3,6 +3,18 @@ import { admin, asUser, json, cors, signTicket, round2 } from "./lib.ts";
 
 const PAYMENTS_MODE = Deno.env.get("PAYMENTS_MODE") ?? "sandbox";
 
+/** Buyer fee by offer kind (design brief §4.3). Tenant defaults apply to tickets; the rest are fixed platform rules. */
+function feeFor(kind: string, face: number, tenant: any): number {
+  if (face <= 0) return 0;
+  switch (kind) {
+    case "ticket": return round2(face * Number(tenant.buyer_fee_pct) + Number(tenant.buyer_fee_fixed));
+    case "daypass": case "item": return round2(face * Number(tenant.buyer_fee_pct));
+    case "stay": return round2(face * 0.04);
+    default: return 0; // pass, table, deal
+  }
+}
+const TOTAL_CAP = 20;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return cors();
   if (req.method !== "POST") return json({ error: "method" }, 405);
@@ -15,21 +27,28 @@ Deno.serve(async (req) => {
 
   const { data: tenant } = await db.from("tenants").select("*").eq("slug", b.tenant ?? "lb").single();
   if (!tenant) return json({ error: "tenant" }, 404);
-  const { data: ev } = await db.from("events").select("id,status,doors_at,starts_at,seated,tenant_id").eq("id", b.event_id).single();
+  const { data: ev } = await db.from("events").select("id,status,doors_at,starts_at,seated,tenant_id,kind,organiser_id").eq("id", b.event_id).single();
   if (!ev || ev.tenant_id !== tenant.id || !["live", "sold_out"].includes(ev.status)) return json({ error: "event_unavailable" }, 409);
   if (!tenant.payment_methods.includes(b.payment_method)) return json({ error: "payment_method" }, 400);
 
   const lines = b.lines.filter((l: any) => l.tier_id && l.qty > 0);
   const totalQty = lines.reduce((a: number, l: any) => a + l.qty, 0);
-  if (totalQty > 6) return json({ error: "per_order_limit" }, 400);
+  if (totalQty > TOTAL_CAP) return json({ error: "per_order_limit" }, 400);
+  if (!lines.length && !b.table_id) return json({ error: "bad_request" }, 400);
   const tierIds = lines.map((l: any) => l.tier_id);
-  const { data: tiers } = await db.from("tiers").select("*").in("id", tierIds).eq("event_id", ev.id);
+  const { data: tiers } = tierIds.length ? await db.from("tiers").select("*").in("id", tierIds).eq("event_id", ev.id) : { data: [] as any[] };
   if (!tiers || tiers.length !== tierIds.length) return json({ error: "tier" }, 400);
   const now = new Date();
-  for (const t of tiers) {
+  for (const l of lines) {
+    const t = tiers.find((x) => x.id === l.tier_id)!;
     if (t.sale_starts && new Date(t.sale_starts) > now) return json({ error: "sale_not_started", tier: t.id }, 409);
     if (t.sale_ends && new Date(t.sale_ends) < now) return json({ error: "sale_ended", tier: t.id }, 409);
+    if (l.qty > (t.per_order_limit ?? 6)) return json({ error: "per_order_limit", tier: t.id }, 400);
   }
+
+  // A valid pass covers member_free offers (day passes at partner venues)
+  const { data: passRows } = await db.from("tickets").select("id,valid_until,tiers!inner(kind)").eq("holder_id", user.id).in("state", ["valid", "scanned"]).eq("tiers.kind", "pass");
+  const hasPass = (passRows ?? []).some((p: any) => !p.valid_until || new Date(p.valid_until) > now);
 
   const held: { tier_id: string; qty: number }[] = [];
   for (const l of lines) {
@@ -50,17 +69,33 @@ Deno.serve(async (req) => {
   const priced: any[] = [];
   for (const l of lines) {
     const t = tiers.find((x) => x.id === l.tier_id)!;
-    const unitFace = Number(t.face_price);
-    const unitFee = unitFace === 0 ? 0 : round2(unitFace * Number(tenant.buyer_fee_pct) + Number(tenant.buyer_fee_fixed));
+    const covered = !!t.member_free && hasPass;
+    const unitFace = covered ? 0 : Number(t.face_price);
+    const unitFee = feeFor(t.kind ?? "ticket", unitFace, tenant);
     face += unitFace * l.qty; fee += unitFee * l.qty;
-    priced.push({ tier: t, qty: l.qty, unitFace, unitFee, seats: l.seats ?? [] });
+    priced.push({ tier: t, qty: l.qty, unitFace, unitFee, seats: l.seats ?? [], covered });
   }
-  let discount = 0, promo: any = null;
+
+  // Codes: a promo code discounts; a promoter code attributes; a friend's referral code gives 10% off the first order
+  let discount = 0, promo: any = null, promoterCode: string | null = null, referralCode: string | null = null;
   if (b.promo_code) {
     const { data: p } = await db.from("promo_codes").select("*").eq("tenant_id", tenant.id).eq("code", String(b.promo_code).toUpperCase()).eq("active", true).maybeSingle();
     const valid = p && (!p.event_id || p.event_id === ev.id) && (!p.max_uses || p.uses < p.max_uses) && (!p.starts_at || new Date(p.starts_at) <= now) && (!p.ends_at || new Date(p.ends_at) >= now);
     if (!valid) { await releaseAll(); return json({ error: "promo_invalid" }, 400); }
     promo = p; discount = round2(p.pct_off ? face * Number(p.pct_off) / 100 : Math.min(face, Number(p.fixed_off ?? 0)));
+  }
+  const ref = String(b.referral_code ?? b.promoter_code ?? "").toUpperCase().trim();
+  if (ref) {
+    const { data: pr } = await db.from("promoters").select("code").eq("tenant_id", tenant.id).eq("code", ref).maybeSingle();
+    if (pr) promoterCode = pr.code;
+    else {
+      const { data: friend } = await db.from("profiles").select("id").eq("referral_code", ref).neq("id", user.id).maybeSingle();
+      if (friend) {
+        referralCode = ref;
+        const { count } = await db.from("orders").select("id", { count: "exact", head: true }).eq("buyer_id", user.id).in("status", ["paid", "reserved"]);
+        if (!count && !promo) discount = round2(face * 0.1);
+      }
+    }
   }
   const deposit = table ? Number(table.deposit) : 0;
   const total = round2(face + fee + deposit - discount);
@@ -71,13 +106,14 @@ Deno.serve(async (req) => {
   const holdExpires = reserve
     ? new Date(new Date(ev.doors_at ?? ev.starts_at).getTime() - Number(tenant.cash_hold_hours_before_doors) * 3600e3)
     : new Date(Date.now() + Number(tenant.checkout_hold_minutes) * 60e3);
+  const meta = { party: b.party ?? null, time: b.time ?? null, nights: b.nights ?? null, gift: b.gift ?? null, covered: priced.some((p) => p.covered) };
 
   const { data: order, error: oerr } = await db.from("orders").insert({
     tenant_id: tenant.id, event_id: ev.id, buyer_id: user.id, status: "pending", payment_method: b.payment_method,
     currency: tenant.base_currency, fx_rate: tenant.fx_rate, face_total: round2(face), buyer_fee: round2(fee), discount, table_deposit: deposit,
     total, organiser_fee, processing_fee,
-    fee_snapshot: { buyer_fee_pct: tenant.buyer_fee_pct, buyer_fee_fixed: tenant.buyer_fee_fixed, organiser_fee_pct: tenant.organiser_fee_pct, processing_pct: tenant.processing_pct },
-    promo_code: promo?.code ?? null, promoter_code: b.promoter_code ?? null, referral_code: b.referral_code ?? null, hold_expires_at: holdExpires.toISOString(),
+    fee_snapshot: { buyer_fee_pct: tenant.buyer_fee_pct, buyer_fee_fixed: tenant.buyer_fee_fixed, organiser_fee_pct: tenant.organiser_fee_pct, processing_pct: tenant.processing_pct, kinds: priced.map((p) => p.tier.kind) },
+    promo_code: promo?.code ?? null, promoter_code: promoterCode, referral_code: referralCode, hold_expires_at: holdExpires.toISOString(), meta,
   }).select().single();
   if (oerr || !order) { await releaseAll(); return json({ error: "order_insert", detail: oerr?.message }, 500); }
 
@@ -89,25 +125,37 @@ Deno.serve(async (req) => {
   if (promo) await db.from("promo_codes").update({ uses: promo.uses + 1 }).eq("id", promo.id);
 
   const status: "paid" | "reserved" = reserve ? "reserved" : "paid";
-  if (PAYMENTS_MODE !== "sandbox" && !reserve) {
+  if (PAYMENTS_MODE !== "sandbox" && !reserve && total > 0) {
     return json({ order_id: order.id, status: "pending", total, next: "payment_redirect_not_configured" }, 202);
   }
 
   const tickets: any[] = [];
   for (const p of priced) {
-    for (let i = 0; i < p.qty; i++) {
+    const months = p.tier.kind === "pass" ? Number(p.tier.plan_months ?? 1) : 0;
+    const validUntil = months ? new Date(new Date().setMonth(new Date().getMonth() + months)).toISOString() : null;
+    // stays: one ticket per booking, qty = nights; everything else: one ticket per unit
+    const count = p.tier.kind === "stay" ? 1 : p.qty;
+    for (let i = 0; i < count; i++) {
       const { data: code } = await db.rpc("gen_ticket_code");
       const id = crypto.randomUUID();
-      tickets.push({ id, tenant_id: tenant.id, order_id: order.id, event_id: ev.id, tier_id: p.tier.id, holder_id: user.id, code, token: await signTicket(id), seat: p.seats[i] ?? null, state: status === "paid" ? "valid" : "reserved" });
+      tickets.push({ id, tenant_id: tenant.id, order_id: order.id, event_id: ev.id, tier_id: p.tier.id, holder_id: user.id, code, token: await signTicket(id), seat: p.seats[i] ?? null, state: status === "paid" ? "valid" : "reserved", valid_until: validUntil });
     }
+  }
+  if (table && !tickets.length) {
+    // a table booking on its own still needs a QR at the door
+    const { data: code } = await db.rpc("gen_ticket_code");
+    const id = crypto.randomUUID();
+    tickets.push({ id, tenant_id: tenant.id, order_id: order.id, event_id: ev.id, tier_id: null, holder_id: user.id, code, token: await signTicket(id), seat: table.name, state: status === "paid" ? "valid" : "reserved" });
   }
   if (tickets.length) await db.from("tickets").insert(tickets);
   for (const h of held) { if (status === "paid") await db.rpc("confirm_sale", { p_tier: h.tier_id, p_qty: h.qty }); }
   await db.from("orders").update({ status, paid_at: status === "paid" ? new Date().toISOString() : null }).eq("id", order.id);
-  const { data: remaining } = await db.from("tiers").select("capacity,sold,held").eq("event_id", ev.id);
-  if (remaining && remaining.every((t) => t.sold + t.held >= t.capacity)) await db.from("events").update({ status: "sold_out" }).eq("id", ev.id);
+  if (ev.kind === "event") {
+    const { data: remaining } = await db.from("tiers").select("capacity,sold,held").eq("event_id", ev.id);
+    if (remaining && remaining.length && remaining.every((t) => t.sold + t.held >= t.capacity)) await db.from("events").update({ status: "sold_out" }).eq("id", ev.id);
+  }
 
-  await db.from("message_log").insert({ tenant_id: tenant.id, user_id: user.id, channel: "whatsapp", template: status === "paid" ? "ticket_delivery" : "reservation", payload: { order_id: order.id, tickets: tickets.map((t) => t.code) } });
+  await db.from("message_log").insert({ tenant_id: tenant.id, user_id: user.id, channel: "whatsapp", template: status === "paid" ? "ticket_delivery" : "reservation", payload: { order_id: order.id, tickets: tickets.map((t) => t.code), gift: meta.gift } });
 
   return json({ order_id: order.id, status, total, currency: tenant.base_currency, lbp: Math.round(total * Number(tenant.fx_rate) / 1000) * 1000, tickets: tickets.map((t) => ({ id: t.id, code: t.code, token: t.token, seat: t.seat, state: t.state })) }, 201);
 });

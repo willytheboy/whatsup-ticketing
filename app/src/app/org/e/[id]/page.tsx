@@ -4,10 +4,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import TopBar from "@/components/TopBar";
 import { sb } from "@/lib/supabase-browser";
-import { allIn, money } from "@/lib/config";
+import { allInKind, money } from "@/lib/config";
 import { useT } from "@/lib/lang";
 
-const CATEGORIES = ["Music", "Festival", "Comedy", "Food", "Outdoors", "Art", "Sports"];
+const CATEGORIES = ["Events", "Music", "Dining", "Beach", "Stay", "Theatre", "Sport", "Festival", "Comedy", "Food", "Outdoors", "Art", "Sports"];
 const toLocal = (iso: string) => {
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, "0");
@@ -112,7 +112,7 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
             <button key={v} className={ev.status === v ? "on" : ""} onClick={() => set("status", v)}>{label}</button>
           ))}
         </div>
-        <div className="card stack">
+        <div className="card pad stack">
           <div className="field"><span className="label">{t("evName")}</span><input value={ev.title ?? ""} onChange={(e) => set("title", e.target.value)} /></div>
           <div className="field"><span className="label">{t("evNameAr")}</span><input dir="rtl" value={ev.title_ar ?? ""} onChange={(e) => set("title_ar", e.target.value)} /></div>
           <div className="row">
@@ -129,7 +129,7 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
           </div>
           <div className="field"><span className="label">{t("desc")}</span><textarea value={ev.description ?? ""} onChange={(e) => set("description", e.target.value)} /></div>
         </div>
-        <div className="card stack">
+        <div className="card pad stack">
           <div className="tierrow label"><span>{t("tierName")}</span><span>{t("price")}</span><span>{t("qty")}</span><span /></div>
           {tiers.map((x, i) => (
             <div key={x.id ?? i}>
@@ -140,15 +140,16 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
                 <span className="note num" style={{ width: 28, textAlign: "end" }}>{x.sold ?? 0}</span>
               </div>
               <div className="note num">
-                {+x.face_price > 0 ? `${money(allIn(+x.face_price))} ${t("perTicket")} · ${x.sold ?? 0} ${t("soldLabel")}` : t("free")}
+                {+x.face_price > 0 ? `${money(allInKind((x as any).kind ?? "ticket", +x.face_price))} ${t("allIn")} · ${t((x as any).kind ?? "ticket")} · ${x.sold ?? 0} ${t("soldLabel")}` : t("free")}
               </div>
             </div>
           ))}
-          <button className="btn ghost sm" onClick={() => setTiers([...tiers, { name: "VIP", face_price: 60, capacity: 40, sold: 0, held: 0, per_order_limit: 6 }])}>{t("addTier")}</button>
+          <button className="btn ghost sm" onClick={() => setTiers([...tiers, { name: "VIP", face_price: 60, capacity: 40, sold: 0, held: 0, per_order_limit: 6, kind: "ticket" } as any])}>{t("addTier")}</button>
         </div>
         {err && <div className="err">{err}</div>}
-        {toast && <div className="pill ok" style={{ alignSelf: "center" }}>{toast}</div>}
-        <button className="btn green" disabled={busy} onClick={save}>{t("save")}</button>
+        {toast && <div className="tag ok" style={{ alignSelf: "center" }}>{toast}</div>}
+        <button className="btn green" disabled={busy} onClick={save}>{t("saveChanges")}</button>
+        <Link className="btn red" href={`/org/promote/${ev.id}`}>★ {t("promote")}</Link>
         <div className="row">
           <button className="btn ghost" disabled={busy} onClick={duplicate}>{t("duplicate")}</button>
           <Link className="btn ghost" href={`/e/${ev.slug}`}>{t("viewPublic")}</Link>

@@ -7,21 +7,38 @@ export const SUPABASE_ANON_KEY =
 export const TENANT = process.env.NEXT_PUBLIC_TENANT ?? "lb";
 export const APP_ROLE = process.env.NEXT_PUBLIC_APP_ROLE ?? "ticketing";
 export const BACKOFFICE_URL = process.env.NEXT_PUBLIC_BACKOFFICE_URL ?? "https://whatsup-backoffice-app.vercel.app";
+export const IG_HANDLE = "whatsuplebanon";
+export const SHORT_HOST = "wul.app";
 
 /** Tenant time zone used for every date/time shown to buyers and staff. */
 export const TZ = "Asia/Beirut";
 
-// Fee model (mirrors tenants.* defaults; the edge function is the source of truth at checkout)
+/* ------------------------------------------------------------------ fee engine (brief §4.3)
+   Buyer fee by offer type, shown all-in. The create-order edge function applies the same table. */
+export type OfferKind = "ticket" | "daypass" | "item" | "stay" | "pass" | "table" | "deal";
 export const FEE_PCT = 0.05;
 export const FEE_FIXED = 0.5;
 export const ORGANISER_FEE_PCT = 0.03;
 export const PROCESSING_PCT = 0.025;
 export const FX_RATE = 89500; // LBP per USD (display only)
-
-/** Buyer price for one ticket, all-in. Free tiers stay free. */
-export const allIn = (face: number) => (face === 0 ? 0 : Math.round((face + face * FEE_PCT + FEE_FIXED) * 100) / 100);
-/** What the organiser keeps per ticket after the organiser fee and card processing. */
-export const organiserNet = (face: number) => Math.round(face * (1 - ORGANISER_FEE_PCT - PROCESSING_PCT) * 100) / 100;
+export const FEES: Record<OfferKind, { pct: number; fixed: number }> = {
+  ticket: { pct: 0.05, fixed: 0.5 },
+  daypass: { pct: 0.05, fixed: 0 },
+  item: { pct: 0.05, fixed: 0 },
+  stay: { pct: 0.04, fixed: 0 },
+  pass: { pct: 0, fixed: 0 },
+  table: { pct: 0, fixed: 0 },
+  deal: { pct: 0, fixed: 0 },
+};
+export const r2 = (n: number) => Math.round(n * 100) / 100;
+/** Buyer fee for one unit of a given kind. Free things carry no fee. */
+export const unitFee = (kind: OfferKind, face: number) => (face <= 0 ? 0 : r2(face * FEES[kind].pct + FEES[kind].fixed));
+/** Buyer price for one unit, all-in. */
+export const allInKind = (kind: OfferKind, face: number) => r2(face + unitFee(kind, face));
+/** Buyer price for one ticket, all-in (legacy helper). */
+export const allIn = (face: number) => allInKind("ticket", face);
+/** What the organiser keeps per unit after the organiser fee (waived on free) and card processing. */
+export const organiserNet = (face: number, orgPct = ORGANISER_FEE_PCT) => (face <= 0 ? 0 : r2(face * (1 - orgPct - PROCESSING_PCT)));
 export const money = (usd: number) => (usd === 0 ? "Free" : "$" + usd.toFixed(2).replace(/\.00$/, ""));
 export const lbp = (usd: number) => "LBP " + (Math.round((FX_RATE * usd) / 1000) * 1000).toLocaleString("en-US");
 export const fmtDate = (iso: string) =>
@@ -34,3 +51,50 @@ export const signed = (n: number | string | null | undefined) => {
   const v = Number(n ?? 0);
   return (v < 0 ? "−" : "") + "$" + Math.abs(v).toFixed(2);
 };
+
+/* ------------------------------------------------------------------ catalogue (brief §4.2)
+   Home rail. Legacy event categories map onto the rail so nothing already published disappears. */
+export const RAIL: [string, string][] = [
+  ["all", "tonight"], ["Dining", "dining"], ["Beach", "beach"], ["Stay", "stay"], ["Events", "events"],
+  ["Music", "music"], ["Theatre", "theatre"], ["Sport", "sport"], ["Deals", "deals"], ["Passes", "passes"],
+];
+export const CATEGORY_ALIASES: Record<string, string[]> = {
+  Dining: ["Dining", "Food"],
+  Beach: ["Beach"],
+  Stay: ["Stay"],
+  Events: ["Events", "Festival", "Outdoors", "Art", "Community"],
+  Music: ["Music"],
+  Theatre: ["Theatre", "Comedy"],
+  Sport: ["Sport", "Sports"],
+};
+export const LISTING_CATEGORIES = ["Events", "Music", "Dining", "Beach", "Stay", "Theatre", "Sport"];
+export const railKey = (category: string) => Object.keys(CATEGORY_ALIASES).find((k) => CATEGORY_ALIASES[k].includes(category)) ?? "Events";
+
+/* ------------------------------------------------------------------ upgrade ladder (monetisation model)
+   Organiser plans. Fees live on the tenant; the plan changes the organiser fee and unlocks tools. */
+export type PlanId = "free" | "pro" | "venue";
+export const PLANS: { id: PlanId; price: number | null; orgPct: number; features: string[] }[] = [
+  { id: "free", price: 0, orgPct: 0.03, features: ["planF1", "planF2", "planF3", "planF4"] },
+  { id: "pro", price: 49, orgPct: 0.025, features: ["planP1", "planP2", "planP3", "planP4", "planP5"] },
+  { id: "venue", price: null, orgPct: 0.02, features: ["planV1", "planV2", "planV3", "planV4", "planV5"] },
+];
+export const planOf = (id: string | null | undefined) => PLANS.find((p) => p.id === id) ?? PLANS[0];
+/** Which plan a venue tool needs. */
+export const REQUIRES: Record<string, PlanId> = { promoters: "pro", broadcast: "pro", insights: "pro", station: "venue", passes: "venue", rules: "venue" };
+export const planRank: Record<PlanId, number> = { free: 0, pro: 1, venue: 2 };
+export const hasPlan = (plan: string | null | undefined, need: PlanId) => planRank[planOf(plan).id] >= planRank[need];
+
+/** Promote packages: media revenue. Paid into promotion_orders → ledger (rev:promotions). */
+export const PACKAGES: { id: string; price: number; days: number; featured: boolean; lines: string[] }[] = [
+  { id: "boost", price: 40, days: 7, featured: true, lines: ["pkB1", "pkB2", "pkB3"] },
+  { id: "story", price: 120, days: 7, featured: true, lines: ["pkS1", "pkS2", "pkS3", "pkS4"] },
+  { id: "takeover", price: 300, days: 14, featured: true, lines: ["pkT1", "pkT2", "pkT3", "pkT4", "pkT5"] },
+];
+
+/** Placeholder art when a listing has no photo: flat colour from the brand palette, deterministic by id. */
+export const PALETTE = ["#639922", "#3B6D11", "#97C459", "#7A7975", "#B7B5AC", "#5F5E5A"];
+export function tone(id: string) {
+  let h = 0;
+  for (const ch of id) h = (31 * h + ch.charCodeAt(0)) % PALETTE.length;
+  return PALETTE[h];
+}

@@ -19,3 +19,13 @@ export function setLang(lang: Lang) {
   document.cookie = `lang=${lang};path=/;max-age=31536000;samesite=lax`;
   location.reload();
 }
+/** Persist the city scope (empty = whole country) and reload. */
+export function setCity(city: string) {
+  document.cookie = `city=${encodeURIComponent(city)};path=/;max-age=31536000;samesite=lax`;
+  location.reload();
+}
+/** Pick the localised field of a row (title/title_ar …). */
+export function pick<T extends Record<string, any>>(lang: Lang, row: T | null | undefined, key: string): string {
+  if (!row) return "";
+  return (lang === "ar" && row[`${key}_ar`]) || row[key] || "";
+}

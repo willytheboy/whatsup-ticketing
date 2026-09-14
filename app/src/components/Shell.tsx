@@ -2,32 +2,36 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useT } from "@/lib/lang";
-import { useRoles } from "@/lib/roles";
-import { BACKOFFICE_URL } from "@/lib/config";
+import { I } from "./Icons";
+import { ToastProvider } from "./Toast";
 
+const TABS: [string, string, keyof typeof I][] = [
+  ["/", "nHome", "home"],
+  ["/search", "nSearch", "search"],
+  ["/ask", "nAsk", "ask"],
+  ["/radio", "nRadio", "radio"],
+  ["/vibe", "nVibe", "vibe"],
+  ["/wallet", "nWallet", "wallet"],
+];
+const HIDE = ["/checkout", "/t/", "/login", "/story/", "/org/new", "/org/promote", "/room/", "/admin"];
+
+/** Six tabs for everyone (brief §4.4). Venue tools live behind Profile → Venue, so buyers never see them. */
 function Tabs() {
   const path = usePathname();
   const t = useT();
-  const roles = useRoles();
-  if (path.startsWith("/checkout") || path.startsWith("/t/") || path.startsWith("/login") || path.startsWith("/org/new") || path.startsWith("/admin")) return null;
-  const tabs: [string, string, string][] = [
-    ["/", "discover", "◎"],
-    ["/live", "liveTab", "♫"],
-    ["/tickets", "tickets", "▣"],
-  ];
-  if (roles.isOrganiser) tabs.push(["/org", "organiser", "▤"]);
-  if (roles.isDoor) tabs.push(["/org/door", "door", "▦"]);
-  if (roles.isAdmin) tabs.push([BACKOFFICE_URL, "backOffice", "▥"]);
-  const on = (href: string) =>
-    href === "/" ? path === "/" : href === "/org" ? path.startsWith("/org") && !path.startsWith("/org/door") : !href.startsWith("http") && path.startsWith(href);
+  if (HIDE.some((p) => path.startsWith(p))) return null;
+  const on = (href: string) => (href === "/" ? path === "/" || path.startsWith("/e/") : path.startsWith(href));
   return (
-    <nav className="tabs" style={{ gridTemplateColumns: `repeat(${tabs.length},1fr)` }}>
-      {tabs.map(([href, key, icon]) => (
-        <Link key={href} href={href} className={`tab ${on(href) ? "on" : ""}`}>
-          <span className="ico">{icon}</span>
-          {t(key)}
-        </Link>
-      ))}
+    <nav className="tabs" aria-label="Main">
+      {TABS.map(([href, key, icon]) => {
+        const Icon = I[icon];
+        return (
+          <Link key={href} href={href} className={`tab ${on(href) ? "on" : ""}`}>
+            <Icon />
+            <span>{t(key)}</span>
+          </Link>
+        );
+      })}
     </nav>
   );
 }
@@ -35,11 +39,13 @@ function Tabs() {
 /** Phone-shaped stage with the bottom tab bar. The back office (/admin) renders full-width without it. */
 export default function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
-  if (path.startsWith("/admin")) return <>{children}</>;
+  if (path.startsWith("/admin")) return <ToastProvider>{children}</ToastProvider>;
   return (
-    <div className="stage">
-      {children}
-      <Tabs />
-    </div>
+    <ToastProvider>
+      <div className="stage">
+        {children}
+        <Tabs />
+      </div>
+    </ToastProvider>
   );
 }
