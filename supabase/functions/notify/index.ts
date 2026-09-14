@@ -55,6 +55,14 @@ export function render(template: string, p: any, lang: string): { text: string; 
       : { subject: "Refunded", params: [money(p.total)], text: `✅ ${money(p.total)} has been refunded${p.method === "credit" ? " as credit on your account" : " to your payment method"}.` };
     case "promoter_sale": return { subject: "You made a sale", params: [p.event ?? "", money(p.commission)], text: `🎉 A sale through your link for ${p.event ?? ""}. Commission: ${money(p.commission)}.` };
     case "otp": return { subject: "Your code", params: [p.otp ?? ""], text: `Your WhatsUp code: ${p.otp ?? ""}` };
+    case "statement": {
+      // v0.8: weekly / monthly partner statement (queued from Back office → Settlements → Send). p.text is the drafted message when the admin edited one.
+      const bal = Number(p.balance ?? 0);
+      const body = p.text ?? (ar
+        ? `📄 كشف حساب ${p.partner ?? ""} · ${p.period ?? ""}\nالإجمالي: ${money(p.gross)} · الرسوم: ${money(p.fees)} · كاش عندكن: ${money(p.cash)}\n${bal >= 0 ? `منحوّللكن ${money(bal)}` : `مستحق علينا ${money(-bal)}`}${p.reference ? ` · المرجع ${p.reference}` : ""}\nالتفاصيل: ${APP_URL}/org/finance`
+        : `📄 ${p.partner ?? ""} statement · ${p.period ?? ""}\nGross ${money(p.gross)} · fees ${money(p.fees)} · cash you hold ${money(p.cash)}\n${bal >= 0 ? `We pay you ${money(bal)}` : `You owe ${money(-bal)}`}${p.reference ? ` · ref ${p.reference}` : ""}\nDetails: ${APP_URL}/org/finance`);
+      return { subject: `${p.partner ?? "Partner"} statement · ${p.period ?? ""}`, params: [p.partner ?? "", p.period ?? "", money(bal)], text: body };
+    }
     default: return { subject: template, params: [], text: `${template}: ${JSON.stringify(p)}` };
   }
 }
@@ -96,11 +104,12 @@ Deno.serve(async (req) => {
     const p = m.payload ?? {};
     const { data: prof } = m.user_id ? await db.from("profiles").select("phone,email,lang,prefs").eq("id", m.user_id).maybeSingle() : { data: null };
     const lang = p.lang ?? prof?.lang ?? "en";
-    const to = p.to ?? prof?.phone ?? null;
+    const to = p.to ?? p.to_phone ?? prof?.phone ?? null;
+    const email = p.to_email ?? prof?.email ?? null;
     const prefs = prof?.prefs ?? {};
     const r = render(m.template, p, lang);
     const reminder = ["reminder_24h", "reminder_2h", "weekly_digest"].includes(m.template);
-    const always = m.template === "otp" || m.template === "transfer" || m.template.startsWith("refund");
+    const always = m.template === "otp" || m.template === "transfer" || m.template.startsWith("refund") || m.template === "statement";
     const wantsWa = always || (reminder ? (prefs.wa_reminders ?? true) : (prefs.wa_tickets ?? true));
     let status = "sandbox", ref: string | null = null, err: string | null = null;
     if (to && wantsWa && WA_TOKEN && WA_PHONE_ID) {
@@ -108,8 +117,8 @@ Deno.serve(async (req) => {
       status = res.ok ? "sent" : "failed"; ref = res.ref; err = res.error; res.ok ? sent++ : failed++;
     } else if (!to) { status = "skipped"; err = "no_phone"; }
     else sandbox++;
-    if (RESEND_KEY && prof?.email && (prefs.email_copies || !to) && ["ticket_delivery", "reservation", "refund", "refund_requested", "transfer"].includes(m.template)) {
-      const e = await sendEmail(prof.email, r.subject, r.text); if (e.ok) emails++;
+    if (RESEND_KEY && email && (prefs.email_copies || !to || m.template === "statement") && ["ticket_delivery", "reservation", "refund", "refund_requested", "transfer", "statement"].includes(m.template)) {
+      const e = await sendEmail(email, r.subject, r.text); if (e.ok) emails++;
     }
     await db.from("message_log").update({ status, provider_ref: ref, payload: { ...p, rendered: r.text, ...(err ? { error: err } : {}) } }).eq("id", m.id);
   }

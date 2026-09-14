@@ -2,12 +2,13 @@
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { sb } from "@/lib/supabase-browser";
-import { TENANT } from "@/lib/config";
+import { useConfig } from "@/components/Config";
 
 export type Tenant = { id: string; slug: string; name: string; base_currency: string; fx_rate: number };
 
 /** Back-office session: signed-in user, whether they are a tenant admin, and the tenant row. */
 export function useAdmin() {
+  const { slug: TENANT } = useConfig();
   const [state, setState] = useState<{ loaded: boolean; user: User | null; isAdmin: boolean; tenant: Tenant | null }>({
     loaded: false, user: null, isAdmin: false, tenant: null,
   });
@@ -23,7 +24,7 @@ export function useAdmin() {
     load();
     const { data: sub } = sb().auth.onAuthStateChange(() => load());
     return () => { alive = false; sub.subscription.unsubscribe(); };
-  }, []);
+  }, [TENANT]);
   return state;
 }
 

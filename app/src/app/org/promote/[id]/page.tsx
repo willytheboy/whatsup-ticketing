@@ -43,7 +43,7 @@ export default function PromotePage({ params }: { params: { id: string } }) {
 
   return (
     <>
-      <TopBar back="/org" title={t("promoteTitle")} />
+      <TopBar back="/org" title={t("promoteTitle")} right={ev ? <Link href={`/org/kit/${ev.id}`} className="btn xs line">{t("kit")}</Link> : undefined} />
       <main>
         {ev && <div><div className="title" style={{ fontSize: 18 }}>{lang === "ar" && ev.title_ar ? ev.title_ar : ev.title}</div><p className="meta" style={{ margin: "4px 0 0" }}>{t("promoteSub")}</p></div>}
         {user === null && <Link href={`/login?next=/org/promote/${params.id}`} className="btn green">{t("signIn")}</Link>}

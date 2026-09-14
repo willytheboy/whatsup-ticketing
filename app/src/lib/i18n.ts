@@ -257,6 +257,12 @@ const D: Record<string, [string, string]> = {
   locked: ["Locked", "مقفول"], lockedNote: ["This ticket was scanned as a duplicate 3 times in 10 minutes and is frozen. Release it from the list below if the person is genuine.", "هالتذكرة انمسحت مكرّرة ٣ مرات بـ ١٠ دقايق وانقفلت. حرّرها من اللائحة إذا الشخص حقيقي."],
   release: ["Release", "حرّر"], lockedTickets: ["Locked tickets", "تذاكر مقفولة"],
   forecast30: ["Next 30 days", "الـ ٣٠ يوم الجايين"],
+  // v0.8 · marketing kit, WhatsApp selling
+  kit: ["Marketing kit", "عدّة التسويق"], kitSub: ["Captions, a broadcast and print-ready posters for this listing — made from your own photo and prices.", "كابشنات، رسالة جماعية وبوسترات جاهزة للطباعة لهالإعلان — من صورتك وأسعارك."],
+  captions: ["Instagram captions", "كابشنات إنستغرام"], broadcast: ["WhatsApp broadcast", "رسالة واتساب جماعية"], hashtags: ["Hashtags", "هاشتاغات"],
+  posterA4: ["A4 poster", "بوستر A4"], qrStand: ["QR stand", "ستاند QR"], printKit: ["Print kit", "عدّة الطباعة"], copy: ["Copy", "انسخ"], copiedK: ["Copied", "انسخت"],
+  regenerate: ["Write again", "اكتب من جديد"], sendWaK: ["Send on WhatsApp", "ابعت عالواتساب"], scanToBook: ["Scan to book", "امسح لتحجز"], ticketsOnWa: ["Tickets on WhatsApp", "التذاكر عالواتساب"],
+  kitNote: ["Posters use your cover photo, the listing's price and a QR to the listing. PNGs print at A4 (poster) and 15×15 cm (stand).", "البوسترات بتستعمل صورة الغلاف والسعر و QR للإعلان. PNG بحجم A4 (بوستر) و ١٥×١٥ سم (ستاند)."],
   // v0.6 · intelligence
   copilot: ["Venue copilot", "مساعد المكان"], copilotQ1: ["What should I do this week?", "شو أعمل هالأسبوع؟"], copilotPh: ["Ask about your sales, a listing, a promoter…", "اسأل عن مبيعاتك، إعلان، مروّج…"],
 };

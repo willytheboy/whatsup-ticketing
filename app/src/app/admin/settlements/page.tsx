@@ -17,6 +17,16 @@ export default function Settlements() {
   const [ref, setRef] = useState("");
   const [method, setMethod] = useState("");
   const [draft, setDraft] = useState<{ s: any; text: string } | null>(null);
+  /** Queue the statement for delivery: the notify function sends it on WhatsApp (partner phone) and by email (partner email). */
+  const send = async (s: any, text?: string) => {
+    if (!admin.tenant) return;
+    const st = s.statement ?? {};
+    const p = s.partners ?? {};
+    if (!p.phone && !p.email) return setMsg(`${p.name ?? "Partner"} has no phone or email on file — add one on the partner page.`);
+    const { error } = await sb().from("message_log").insert({ tenant_id: admin.tenant.id, user_id: null, channel: "whatsapp", template: "statement", status: "queued", payload: { to_phone: p.phone ?? null, to_email: p.email ?? null, partner: p.name, period: `${fmtDate(s.period_start)} → ${fmtDate(s.period_end)}`, gross: st.gross ?? st.face_total ?? 0, fees: st.fees ?? st.platform_fees ?? 0, cash: st.cash_held ?? st.cash ?? 0, balance: Number(s.amount), reference: s.reference ?? null, settlement_id: s.id, ...(text ? { text } : {}) } });
+    setMsg(error ? error.message : `Statement for ${p.name} queued — it goes out with the next WhatsApp/email drain (every 5 minutes; sandbox until the keys are set).`);
+    setDraft(null);
+  };
   const drafting = async (s: any) => {
     setDraft({ s, text: "…" });
     const st = s.statement ?? {};
@@ -26,7 +36,7 @@ export default function Settlements() {
 
   const load = async () => {
     if (!admin.tenant) return;
-    let q = sb().from("settlements").select("*, partners(name,kind,payout_method)").eq("tenant_id", admin.tenant.id).order("created_at", { ascending: false });
+    let q = sb().from("settlements").select("*, partners(name,kind,payout_method,phone,email)").eq("tenant_id", admin.tenant.id).order("created_at", { ascending: false });
     if (status) q = q.eq("status", status);
     const { data } = await q;
     setRows(data ?? []);
@@ -85,7 +95,7 @@ export default function Settlements() {
                     <td className="r"><b><Amount v={s.amount} /></b></td>
                     <td>{s.invoice_id ? <Link href={`/admin/invoices/${s.invoice_id}`}>invoice</Link> : "—"}</td>
                     <td className="mono">{s.reference ?? ""}</td>
-                    <td><div className="row" style={{ gap: 6 }}><button className="btn ghost xs" onClick={() => drafting(s)}>Draft WhatsApp</button>{s.status !== "paid" && <button className="btn green xs" onClick={() => { setPay(s); setMethod(s.method ?? s.partners?.payout_method ?? ""); }}>{Number(s.amount) >= 0 ? "Mark paid" : "Mark received"}</button>}</div></td>
+                    <td><div className="row" style={{ gap: 6 }}><button className="btn ghost xs" onClick={() => drafting(s)}>Draft</button><button className="btn ghost xs" onClick={() => send(s)}>Send</button>{s.status !== "paid" && <button className="btn green xs" onClick={() => { setPay(s); setMethod(s.method ?? s.partners?.payout_method ?? ""); }}>{Number(s.amount) >= 0 ? "Mark paid" : "Mark received"}</button>}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -98,7 +108,8 @@ export default function Settlements() {
           <textarea value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} rows={7} style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 10, padding: 10, fontSize: 14 }} />
           <div className="row" style={{ gap: 8 }}>
             <button className="btn ghost sm" onClick={() => { navigator.clipboard?.writeText(draft.text); }}>Copy</button>
-            <a className="btn green sm" href={`https://wa.me/?text=${encodeURIComponent(draft.text)}`} target="_blank" rel="noopener">Open in WhatsApp</a>
+            <a className="btn ghost sm" href={`https://wa.me/?text=${encodeURIComponent(draft.text)}`} target="_blank" rel="noopener">Open in WhatsApp</a>
+            <button className="btn green sm" onClick={() => send(draft.s, draft.text)}>Send this text</button>
           </div>
         </Modal>
       )}

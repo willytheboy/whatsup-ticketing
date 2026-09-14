@@ -66,6 +66,7 @@ export type Brand = {
   tagline: string; tagline_ar: string;     // Home / share copy
 };
 export type TenantConfig = {
+  slug: string;                                  // tenant slug this request is served for (hostname → tenant, else NEXT_PUBLIC_TENANT)
   theme: ThemeId;
   tabs: Record<TabId, boolean>;
   features: Record<FeatureId, boolean>;
@@ -78,6 +79,7 @@ export const DEFAULT_BRAND: Brand = {
   tagline: "Everything to do in Lebanon — tickets on WhatsApp.", tagline_ar: "كل شي بيصير بلبنان — تذاكرك عالواتساب.",
 };
 export const DEFAULT_CONFIG: TenantConfig = {
+  slug: "lb",
   theme: "cedar",
   tabs: { home: true, search: true, ask: true, radio: true, vibe: true, wallet: true },
   features: Object.fromEntries(FEATURE_IDS.map((k) => [k, true])) as Record<FeatureId, boolean>,
@@ -85,7 +87,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
 };
 
 /** Merge a raw tenants.config / tenants.brand pair with the defaults. Unknown keys are dropped; Home can never be hidden. */
-export function mergeConfig(raw: unknown, brandRaw?: unknown, tenant?: { name?: string | null; country?: string | null; country_ar?: string | null }): TenantConfig {
+export function mergeConfig(raw: unknown, brandRaw?: unknown, tenant?: { slug?: string | null; name?: string | null; country?: string | null; country_ar?: string | null }): TenantConfig {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, any>;
   const b = (brandRaw && typeof brandRaw === "object" ? brandRaw : {}) as Record<string, any>;
   const tabs = { ...DEFAULT_CONFIG.tabs };
@@ -97,7 +99,7 @@ export function mergeConfig(raw: unknown, brandRaw?: unknown, tenant?: { name?: 
   if (tenant?.country) { brand.country = tenant.country; brand.country_ar = tenant.country_ar || tenant.country; }
   if (typeof b.instagram === "string" && b.instagram.trim()) brand.ig = b.instagram.trim().replace(/^@/, ""); // legacy key from v0.4 seeds
   for (const k of Object.keys(DEFAULT_BRAND) as (keyof Brand)[]) if (typeof b[k] === "string" && b[k].trim()) brand[k] = b[k].trim();
-  return { theme: isTheme(r.theme) ? r.theme : "cedar", tabs, features, brand };
+  return { slug: tenant?.slug || DEFAULT_CONFIG.slug, theme: isTheme(r.theme) ? r.theme : "cedar", tabs, features, brand };
 }
 
 /** Tab → the feature that must be on for the tab to make sense. */

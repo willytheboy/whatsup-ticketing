@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const pick = (lang: string, row: any, key: string) => (lang === "ar" && row?.[`${key}_ar`]) || row?.[key] || "";
 
 /** Listing (brief §5.3): hero, description, live meter, room and radio, map, share, offers with pickers, total and actions. */
-export default async function ListingPage({ params }: { params: { slug: string } }) {
+export default async function ListingPage({ params, searchParams }: { params: { slug: string }; searchParams?: { tier?: string; qty?: string; via?: string } }) {
   const lang = getLang();
   const t = await getT(lang);
   const { features } = await getTenantConfig();
@@ -68,7 +68,7 @@ export default async function ListingPage({ params }: { params: { slug: string }
           </div>
         )}
         {lat && lng ? <MapCard lat={lat} lng={lng} address={pick(lang, l.venues, "address") || `${venue}, ${city}`} /> : null}
-        <OfferPicker listing={{ id: l.id, slug: l.slug, title, kind: l.kind, status: l.status, organiser: l.organisers?.name ?? "", organiserWa: (l.organisers as any)?.whatsapp ?? null }} tiers={[...l.tiers].sort((a, b) => a.sort - b.sort)} tables={(l.tables_vip ?? []).filter((x) => !x.reserved_by_order)} deals={l.deals ?? []} addons={features.addons ? (l.addon_options ?? []) : []} />
+        <OfferPicker listing={{ id: l.id, slug: l.slug, title, kind: l.kind, status: l.status, organiser: l.organisers?.name ?? "", organiserWa: (l.organisers as any)?.whatsapp ?? null }} tiers={[...l.tiers].sort((a, b) => a.sort - b.sort)} tables={(l.tables_vip ?? []).filter((x) => !x.reserved_by_order)} deals={l.deals ?? []} addons={features.addons ? (l.addon_options ?? []) : []} preset={searchParams?.tier ? { tier: searchParams.tier, qty: Math.min(20, Math.max(1, Number(searchParams.qty) || 1)) } : undefined} />
       </main>
     </>
   );

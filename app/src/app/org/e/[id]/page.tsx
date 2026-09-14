@@ -188,7 +188,7 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
 
   return (
     <>
-      <TopBar back="/org" title={t("manage")} right={<Link href={`/e/${ev.slug}`} className="btn xs line">{t("viewPublic")}</Link>} />
+      <TopBar back="/org" title={t("manage")} right={<div className="row" style={{ gap: 6 }}><Link href={`/org/kit/${ev.id}`} className="btn xs line">{t("kit")}</Link><Link href={`/e/${ev.slug}`} className="btn xs line">{t("viewPublic")}</Link></div>} />
       <main>
         <div className="row between">
           <span className={`pill ${ev.status === "live" ? "ok" : ev.status === "draft" ? "gold" : ""}`}>{ev.status === "live" ? t("live") : ev.status === "draft" ? t("draftS") : t(ev.status) }</span>

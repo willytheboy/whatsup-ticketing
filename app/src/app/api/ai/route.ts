@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sbServer, sbUser } from "@/lib/supabase-server";
-import { TENANT, allInKind } from "@/lib/config";
+import { allInKind } from "@/lib/config";
+import { getTenantSlug } from "@/lib/tenant-server";
 import { LIST_SELECT, lowest, left, type Listing } from "@/lib/catalogue";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 
 async function catalogue(): Promise<Listing[]> {
   const db = sbServer();
-  const { data: tenant } = await db.from("tenants").select("id").eq("slug", TENANT).maybeSingle();
+  const { data: tenant } = await db.from("tenants").select("id").eq("slug", getTenantSlug()).maybeSingle();
   let q = db.from("events").select(`${LIST_SELECT},description`).in("status", ["live", "sold_out"]).or(`kind.neq.event,starts_at.gte.${new Date(Date.now() - 864e5).toISOString()}`).order("starts_at");
   if (tenant) q = q.eq("tenant_id", tenant.id);
   const { data } = await q;
@@ -175,6 +176,26 @@ export async function POST(req: Request) {
     }
     const plan = (v.plan ?? []).map((tt: string) => resolve(tt)).filter(Boolean).map((l: Listing) => ({ slug: l.slug, title: lang === "ar" && l.title_ar ? l.title_ar : l.title, cover_url: l.cover_url ?? null }));
     return NextResponse.json({ name: v.name, line: v.line, bpm: v.bpm ?? 110, plan, ai: !!process.env.ANTHROPIC_API_KEY });
+  }
+
+  if (b.mode === "kit") {
+    // marketing kit for a listing: three captions, a WhatsApp broadcast and hashtags, in both languages — Claude when available, templates otherwise
+    const k = b.listing ?? {};
+    const facts = `Title: ${k.title}${k.title_ar ? ` / ${k.title_ar}` : ""}. Kind: ${k.kind}. When: ${k.when ?? "open daily"}. Venue: ${k.venue ?? ""}, ${k.city ?? ""}. From: ${k.from ?? ""}. Description: ${String(k.description ?? "").slice(0, 400)}. Link: ${k.link}. Brand: ${k.brand ?? "What's Up Lebanon"} (@${k.ig ?? "whatsuplebanon"}).`;
+    const text = await claude(`Return ONLY JSON {"captions_en":[3 Instagram captions, 12-30 words, no hashtags, one emoji max each],"captions_ar":[3 in Lebanese Arabic dialect],"broadcast_en":"a WhatsApp broadcast to fans, max 60 words, with the link","broadcast_ar":"same in Lebanese Arabic","hashtags":[8 hashtags without #, mixing the brand, the city and the vibe]}. Only facts from: ${facts}. No markdown.`, "Write the kit.", 900);
+    let kit: any = null;
+    if (text) { try { kit = JSON.parse(text.replace(/```json|```/g, "").trim()); } catch {} }
+    if (!kit) {
+      const t = String(k.title ?? ""), ta = String(k.title_ar ?? t), w = String(k.when ?? ""), v = String(k.venue ?? ""), c = String(k.city ?? ""), f = String(k.from ?? ""), link = String(k.link ?? "");
+      kit = {
+        captions_en: [`${t} · ${w} at ${v}. Tickets on WhatsUp — all-in, no surprises. Link in bio 🎟️`, `${c} this week: ${t}. ${f ? `From ${f}. ` : ""}Grab yours before it sells out.`, `Golden hour, good people, ${t}. See you at ${v}.`],
+        captions_ar: [`${ta} · ${w} بـ${v}. التذاكر على WhatsUp — السعر شامل، بلا مفاجآت. الرابط بالبايو 🎟️`, `${c} هالأسبوع: ${ta}. ${f ? `من ${f}. ` : ""}احجز قبل ما تخلص.`, `${ta} — منشوفكن بـ${v}.`],
+        broadcast_en: `🎟️ ${t} — ${w} at ${v}${f ? `, from ${f}` : ""}. Tickets straight to your WhatsApp, all-in pricing, cash at the door welcome: ${link}`,
+        broadcast_ar: `🎟️ ${ta} — ${w} بـ${v}${f ? `، من ${f}` : ""}. التذاكر عالواتساب، السعر شامل، والكاش عالباب مقبول: ${link}`,
+        hashtags: ["whatsuplebanon", c.toLowerCase().replace(/\s+/g, ""), "lebanon", "whatsuptonight", String(k.category ?? "events").toLowerCase(), "tickets", "beirutnights", "livelebanon"].filter(Boolean),
+      };
+    }
+    return NextResponse.json({ ...kit, ai: !!process.env.ANTHROPIC_API_KEY });
   }
 
   if (b.mode === "extract") {

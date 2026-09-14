@@ -16,7 +16,7 @@ export default function Tenants() {
     setMsg("");
     const { data, error } = await sb().rpc("create_tenant", { p_slug: f.slug, p_name: f.name, p_country: f.country || f.name, p_country_ar: f.country_ar || null, p_currency: f.currency, p_display_currency: f.display_currency, p_fx: Number(f.fx) || 1, p_admin_email: f.admin_email || null, p_live: f.live });
     if (error) return setMsg(error.message);
-    setMsg(`Created ${f.slug} (${String(data).slice(0, 8)}). Deploy a ticketing app with NEXT_PUBLIC_TENANT=${f.slug} to give it a feed.`);
+    setMsg(`Created ${f.slug} (${String(data).slice(0, 8)}). Map a hostname to it (TENANT_HOSTS on Vercel) or deploy with NEXT_PUBLIC_TENANT=${f.slug} — see docs/SECOND-COUNTRY.md.`);
     setF({ slug: "", name: "", country: "", country_ar: "", currency: "USD", display_currency: "USD", fx: 1, admin_email: "", live: false }); load();
   };
   const toggleLive = async (r: any) => { await sb().from("tenants").update({ live: !r.live }).eq("id", r.id); load(); };

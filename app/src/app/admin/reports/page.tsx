@@ -86,7 +86,7 @@ export default function Reports() {
           <p className="dim" style={{ fontSize: 12, margin: "8px 0 0" }}>Estimate, not a promise: the higher of the 14-day run-rate projected forward and the pace-based pipeline of every live listing starting in the next 30 days. The same arithmetic organisers see in their pricing tab.</p>
         </Panel>
       )}
-      <Panel title="Platform P&L by month" action={<button className="btn ghost xs" onClick={() => downloadCsv("pnl.csv", pnl)}>Export CSV</button>}>
+      <Panel title="Platform P&L by month" action={<div className="row" style={{ gap: 6 }}><a className="btn ghost xs" href="/admin/reports/board">Board pack ↗</a><button className="btn ghost xs" onClick={() => downloadCsv("pnl.csv", pnl)}>Export CSV</button></div>}>
         {!months.length ? <Empty>No ledger activity yet.</Empty> : (
           <div className="tbl-wrap">
             <table className="tbl">

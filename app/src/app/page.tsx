@@ -5,7 +5,7 @@ import PassPromo from "@/components/PassPromo";
 import { BigCard, SmallCard } from "@/components/Cards";
 import { I } from "@/components/Icons";
 import { sbServer, sbUser } from "@/lib/supabase-server";
-import { TENANT, RAIL, SUPABASE_URL, SUPABASE_ANON_KEY, railKey } from "@/lib/config";
+import { RAIL, SUPABASE_URL, SUPABASE_ANON_KEY, railKey } from "@/lib/config";
 import { getLang, getCity, getT } from "@/lib/lang-server";
 import { getTenantConfig } from "@/lib/features-server";
 import { LIST_SELECT, inRail, isFeatured, type Listing } from "@/lib/catalogue";
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function Home({ searchParams }: { searchParams: { c?: string; ref?: string } }) {
   const lang = getLang();
   const t = await getT(lang);
-  const { features } = await getTenantConfig();
+  const { features, slug: TENANT } = await getTenantConfig();
   const city = getCity();
   const rail = RAIL.some(([k]) => k === searchParams.c) ? (searchParams.c as string) : "all";
   const now = new Date();
@@ -99,14 +99,14 @@ export default async function Home({ searchParams }: { searchParams: { c?: strin
           </Link>
         )}
         <p className="proto" style={{ marginTop: 14 }}>{t("allInFoot")}</p>
-        {searchParams.ref && <RefCapture code={searchParams.ref} />}
+        {searchParams.ref && <RefCapture code={searchParams.ref} tenant={TENANT} />}
       </main>
     </>
   );
 }
 
 /** Store a promoter / referral code from ?ref= so checkout can attribute the order (deep link, brief §4.4). */
-function RefCapture({ code }: { code: string }) {
+function RefCapture({ code, tenant }: { code: string; tenant: string }) {
   const c = code.toUpperCase().replace(/[^A-Z0-9-]/g, "");
-  return <script dangerouslySetInnerHTML={{ __html: `try{localStorage.setItem('wu-ref',${JSON.stringify(c)});localStorage.setItem('wu-ref-at',new Date().toISOString());fetch('${SUPABASE_URL}/rest/v1/rpc/promoter_click',{method:'POST',headers:{'Content-Type':'application/json','apikey':'${SUPABASE_ANON_KEY}','Authorization':'Bearer ${SUPABASE_ANON_KEY}'},body:JSON.stringify({p_tenant:'${TENANT}',p_code:${JSON.stringify(c)}})}).catch(function(){})}catch(e){}` }} />;
+  return <script dangerouslySetInnerHTML={{ __html: `try{localStorage.setItem('wu-ref',${JSON.stringify(c)});localStorage.setItem('wu-ref-at',new Date().toISOString());fetch('${SUPABASE_URL}/rest/v1/rpc/promoter_click',{method:'POST',headers:{'Content-Type':'application/json','apikey':'${SUPABASE_ANON_KEY}','Authorization':'Bearer ${SUPABASE_ANON_KEY}'},body:JSON.stringify({p_tenant:'${tenant}',p_code:${JSON.stringify(c)}})}).catch(function(){})}catch(e){}` }} />;
 }

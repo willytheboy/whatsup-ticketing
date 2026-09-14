@@ -20,8 +20,13 @@ Naming: the function sends `wu_<template>` unless `WA_TPL_<TEMPLATE>` is set in 
 | `wu_refund_requested_org` | event, amount, reason | ↩️ Refund request for {{1}} · {{2}}. Reason: {{3}}. Decide in your dashboard. | — (organisers get English) |
 | `wu_refund` | amount | ✅ {{1}} has been refunded. | ✅ رجعنالك {{1}}. |
 | `wu_promoter_sale` | event, commission | 🎉 A sale through your link for {{1}}. Commission: {{2}}. | — |
+| `wu_statement` (v0.8) | partner, period, balance | 📄 {{1}} statement · {{2}}. Balance {{3}}. Details in your dashboard. | 📄 كشف حساب {{1}} · {{2}}. الرصيد {{3}}. التفاصيل بلوحتك. |
 
 Buttons: `wu_ticket_delivery`, `wu_transfer` and `wu_waitlist` benefit from a URL button pointing at the wallet or listing (`https://whatsup-ticketing-app.vercel.app/{{1}}`); the function passes the URL as a body variable when no button is configured, so the template works either way.
+
+## Inbound (v0.8): the concierge on the business number
+
+Point the Meta webhook at `https://<ref>.supabase.co/functions/v1/wa-inbound` (verify token `WHATSAPP_VERIFY_TOKEN`, app secret `WHATSAPP_APP_SECRET`; subscribe to `messages`). People who write to the number get catalogue answers and one-tap checkout links (`/e/<slug>?tier=…&qty=…&via=wa`) — replies are free-form text inside the 24-hour window, so no template is needed. "Talk to a person" pauses the bot until Back office → WhatsApp releases it. Inbound messages are logged as `whatsapp_in`, replies as template `wa_reply`. With `ANTHROPIC_API_KEY` on the function the answers are phrased by Claude; without it, by rules.
 
 ## Sending rules
 
@@ -29,4 +34,4 @@ The queue is `message_log` (status `queued`). The `notify` function drains it ev
 
 ## Secrets to set on the `notify` and `wa-otp-hook` functions
 
-`WHATSAPP_TOKEN` (permanent system-user token), `WHATSAPP_PHONE_ID`, `WHATSAPP_OTP_TEMPLATE` (default `otp_code`), optional `WA_TPL_*` overrides, `WHATSAPP_TEXT_MODE=1` while templates are pending, `RESEND_API_KEY` and `EMAIL_FROM` for email copies, `NOTIFY_SECRET` (must equal `app_settings.notify_secret`).
+`WHATSAPP_TOKEN` (permanent system-user token), `WHATSAPP_PHONE_ID`, `WHATSAPP_OTP_TEMPLATE` (default `otp_code`), optional `WA_TPL_*` overrides, `WHATSAPP_TEXT_MODE=1` while templates are pending, `RESEND_API_KEY` and `EMAIL_FROM` for email copies, `NOTIFY_SECRET` (must equal `app_settings.notify_secret`). On `wa-inbound` additionally `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, optional `ANTHROPIC_API_KEY`, and `TENANT` (slug the number belongs to). Partner statements (`statement`) go to the partner's phone and email on the partner record, not to a user.

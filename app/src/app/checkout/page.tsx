@@ -5,7 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import TopBar from "@/components/TopBar";
 import LoginForm from "@/components/LoginForm";
 import { sb } from "@/lib/supabase-browser";
-import { TENANT, money, lbp, r2 } from "@/lib/config";
+import { money, lbp, r2 } from "@/lib/config";
 import { useT } from "@/lib/lang";
 import { useConfig } from "@/components/Config";
 import type { Cart } from "../e/[slug]/OfferPicker";
@@ -29,7 +29,7 @@ const ERRORS: Record<string, string> = {
 export default function Checkout() {
   const router = useRouter();
   const t = useT();
-  const { features } = useConfig();
+  const { features, slug: TENANT } = useConfig();
   const [cart, setCart] = useState<Cart | null | undefined>(undefined);
   const [user, setUser] = useState<User | null>(null);
   const [method, setMethod] = useState("card");

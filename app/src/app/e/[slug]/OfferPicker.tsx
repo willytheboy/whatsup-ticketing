@@ -27,7 +27,7 @@ const SLOTS = ["19:00", "19:30", "20:00", "20:30", "21:00", "21:30", "22:00"];
 const nextFriday = () => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7)); return d.toISOString().slice(0, 10); };
 
 /** Offer pickers by type (brief §5.4). Pickers change shape by type; nothing else does. The cart lives in sessionStorage until checkout. */
-export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: dealsIn, addons: addonsIn = [] }: { listing: Cart["listing"] & { status: string; organiser: string; organiserWa?: string | null }; tiers: Tier[]; tables: Table[]; deals: Deal[]; addons?: AddonOption[] }) {
+export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: dealsIn, addons: addonsIn = [], preset }: { listing: Cart["listing"] & { status: string; organiser: string; organiserWa?: string | null }; tiers: Tier[]; tables: Table[]; deals: Deal[]; addons?: AddonOption[]; preset?: { tier: string; qty: number } }) {
   const t = useT();
   const lang = useLang();
   const { features } = useConfig();
@@ -38,7 +38,8 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
   const deals = features.deals ? dealsIn : [];
   const toast = useToast();
   const router = useRouter();
-  const [qty, setQty] = useState<Record<string, number>>({});
+  // a WhatsApp concierge link (?tier=&qty=) arrives with the offer preselected
+  const [qty, setQty] = useState<Record<string, number>>(() => (preset && tiers.some((t) => t.id === preset.tier) ? { [preset.tier]: Math.min(preset.qty, tiers.find((t) => t.id === preset.tier)?.per_order_limit || 6) } : {}));
   const [group, setGroup] = useState<Record<string, boolean>>({});
   const [plan, setPlan] = useState<string | null>(null);
   const [tableId, setTableId] = useState<string | null>(null);
