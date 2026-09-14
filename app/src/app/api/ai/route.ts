@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sbServer, sbUser } from "@/lib/supabase-server";
 import { TENANT, allInKind } from "@/lib/config";
-import { LIST_SELECT, lowest, type Listing } from "@/lib/catalogue";
+import { LIST_SELECT, lowest, left, type Listing } from "@/lib/catalogue";
 
 export const dynamic = "force-dynamic";
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     if (text) {
       const bm = text.match(/BOOK:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(\d+)\s*$/m);
       if (bm) {
-        const l = resolve(bm[1]); const tier = l?.tiers.find((x) => x.name.toLowerCase() === bm[2].trim().toLowerCase()) ?? l?.tiers[0];
+        const l = resolve(bm[1]); const tier = l?.tiers.find((x) => x.name.toLowerCase() === bm[2].trim().toLowerCase() && left(x) > 0) ?? l?.tiers.filter((x) => x.kind !== "pass" && left(x) > 0).sort((a, b) => a.sort - b.sort)[0];
         if (l && tier) cart = { slug: l.slug, tier_id: tier.id, name: tier.name, qty: Math.min(Number(bm[3]) || 1, tier.per_order_limit || 6), kind: tier.kind };
         text = text.replace(/\n?BOOK:.*$/m, "").trim();
       }
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
         : lang === "ar" ? "ما لقيت شي مناسب هلق. جرّب: طاولة، بحر، إقامة، أو سهرة." : "Nothing matches that yet. Try: a table, the beach, a stay, or a night out.";
     }
     if (!cart && open && qtyIn && /book|reserve|احجز|بدي|get|take/i.test(q)) {
-      const tier = open.tiers.filter((x) => x.kind !== "pass").sort((a, b) => a.sort - b.sort)[0];
+      const tier = open.tiers.filter((x) => x.kind !== "pass" && left(x) > 0).sort((a, b) => a.sort - b.sort)[0];
       if (tier) cart = { slug: open.slug, tier_id: tier.id, name: tier.name, qty: Math.min(qtyIn, tier.per_order_limit || 6), kind: tier.kind };
     }
     return NextResponse.json({ text, open: open ? { slug: open.slug, title: lang === "ar" && open.title_ar ? open.title_ar : open.title } : null, cart, ai: !!process.env.ANTHROPIC_API_KEY });
