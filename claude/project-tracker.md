@@ -1,108 +1,153 @@
-# WhatsUp Ticketing — project tracker
+# WhatsUp Ticketing — Project Tracker
 
-**Revision 20** · 2026-09-14 · v0.5.0 — design brief v1.0 applied to the live app; monetisation model wired in as the upgrade ladder
+Single consolidated record across every chat in this project. Read this first; update it as work progresses.
 
-## What changed in v0.5.0 (this revision)
-
-* **Design system** (`docs/DESIGN.md`): the Design Brief v1.0 / prototype v0.6 look on every consumer and venue screen — white canvas, cedar greens, rationed red, facet band, system fonts (Google fonts removed), six tabs **Home · Search · Ask · Radio · Vibe · Wallet**, Profile behind the avatar, venue tools behind Profile → Venue (role-gated).
-* **Listings v2** (`supabase/migrations/20260914100000_listings_v2.sql`, applied): `events.kind` (event / venue / stay / pass), `tiers.kind` (ticket / daypass / item / stay / pass) + `member_free` + `plan_months` + `note`, `events.deals`, `events.pinned`, `tickets.valid_until`, `orders.meta`, `venues.lat/lng`, `organisers.plan/plan_until`, `saved_deals`, `moments` (+ private storage bucket), `v_my_organisers`, `v_room_counts`; functions `upgrade_plan`, `buy_promotion`, `event_room`. Demo seed v2 (`supabase/seed/demo_v2.sql`, applied): beach club, dining venue with tables, guest house, Summer Pass with three plans, items, deals, a promoter, two venue stations.
-* **Edge functions** redeployed: `create-order` (fees by kind — tickets 5% + $0.50, day passes/items 5%, stays 4%, tables/passes none; per-tier limits; a valid pass covers `member_free` offers; promoter vs referral code attribution with 10% off a friend's first order; `meta` for party/time/nights/gift; passes get `valid_until`; table-only bookings get a QR), `scan` (member cards scan every visit at any partner venue until expiry; kind in the result).
-* **Buyer screens**: Home (band, city sheet, category rail, featured card = paid placement first, grid, pass promo, #WeAreLebanon), Search, Listing (hero, live meter, room, radio/story, OSM map card, offers with type-specific pickers, gift box, Notify-me waitlist, group booking, total, card / cash), Checkout, Wallet (member card, ticket cards with facet band + QR, coupons with Redeem), Ticket, Story card (9:16 + 1080×1920 PNG).
-* **Experience layer**: `/api/ai` (Claude when `ANTHROPIC_API_KEY` is set, catalogue rules otherwise) → Ask (concierge with OPEN: action chips), Vibe (name, line, day → dinner → night, generated track), Radio (venue stations from `streams` + "Your vibe" station, ticket CTA), Rooms per listing (realtime chat, pinned live info), Your moment (upload to `moments`), Profile (referral code, settings, WhatsApp reminders, venue entry points, back office).
-* **Upgrade ladder** (monetisation model → product): Plans page Free / Pro $49 / Venue with feature gating (promoters need Pro; station, passes, rules need Venue); Promote packages Boost $40 / Story bundle $120 / Takeover $300 per listing → `promotion_orders` (paid, ledger `rev:promotions`) + `featured_until`; promoters page with `?ref=` links, clicks, sales, commission; venue dashboard with KPIs, inventory sell-through by unit, payout waterfall by plan fee, station block; poster-to-listing with type selector and buyer-price / you-receive preview.
-* **Verified locally** (production build, Playwright 390×844, EN + AR): home, listings (beach / dining / event / pass), search, ask, radio, vibe, story, room, wallet, checkout → sandbox card order → ticket (day pass $15 + $0.75 fee), venue dashboard, plans, promoters, new listing, door, promote, profile. `next build` green (41 routes).
-* **Pending after deploy**: set `ANTHROPIC_API_KEY` on the `whatsup-ticketing-app` Vercel project; custom domains; payment partners (unchanged).
+_Last updated: 14 Sep 2026 — rev 20 (v0.5.0 live on both Vercel projects: Design Brief v1.0 applied to the app, monetisation model wired in as the upgrade ladder; repo pushed to GitHub, git-linked deploys working)_
 
 ---
 
-# Revision 19 (kept for provenance)
+## 1. Where things stand (one-paragraph summary)
 
-**Revision 19** · 2026-09-13 · session https://claude.ai/code/session_01JDd1CsAgTaqWteTAQPrFMW
+WhatsUp Ticketing is an event-ticketing venture that WhatsUp Lebanon (Kareem Chaarani) is starting, with Willy as **developer and technical partner**. The Lebanon launch is the template; WhatsUp [Country] editions follow later. Approved: brief v2.0, partnership & pricing strategy v1.0, functional spec v1.0, App Design Brief v1.0 (14 Sep). **Decision: funding Option A** — Willy builds the core with Claude; RSCB is offered design/front-end (email variant 2, to send before Thu 17 Sep; quote expires ~20 Sep). **Built:** prototype v0.6 → **live app v0.5.0 at https://whatsup-ticketing-app.vercel.app** in the brief's design (white canvas, cedar greens, facet band, six tabs Home · Search · Ask · Radio · Vibe · Wallet; listings with seven offer types; wallet with member cards; Story cards; concierge, vibe creator, radio, rooms, fan moments; venue tools with plans Free / Pro / Venue, Promote packages, promoters, poster-to-listing), Supabase backend (schema v2, fee engine by offer type, holds, edge functions, sweeper, ledger, settlements, reconciliation), **back office at https://whatsup-backoffice-app.vercel.app** (13 screens). Repo `willytheboy/whatsup-ticketing` on `main` = v0.5.0 (commit 4ac2101), both Vercel projects git-linked and deploying on push. Money model in §10; the upgrade ladder in §11 and `claude/upgrade-strategy.md`.
 
-> Revision 18 lived in the project chat and was not reachable from this session, nor was `whatsup-ticketing-repo.zip`.
-> This revision was rebuilt from the live systems (Vercel deployments, the Supabase project, the build logs) and records
-> exactly what was recovered, what was reconstructed, and what still needs a human.
+---
 
-## Status at a glance
+## 2. Parties & roles
 
-| Item | State |
-| --- | --- |
-| Repository | `willytheboy/whatsup-ticketing` · `main` = **v0.4.0** (commit `18549b6`) · working branch `claude/kind-lovelace-k1v208` at the same commit |
-| App build | `next build` green locally and on Vercel — 28 routes (consumer, organiser, `/admin`), middleware 26.6 kB |
-| Vercel · ticketing | **whatsup-ticketing-app** (`prj_hMSiQzhwDnqaouNI28lNttxUk4M1`), git-linked, root `app`, production branch `main` — deployment `dpl_Fu4FLFggntrBRBX2cL7gK1L5CfZH` **READY** → https://whatsup-ticketing-app.vercel.app |
-| Vercel · back office | **whatsup-backoffice-app** (`prj_6YWt2L2EgnaEtfR0f78CIun1q3bh`), git-linked, root `app`, production branch `main` — deployment `dpl_9bYaMkRYeJHNtubW4wPanaURxprM` **READY** → https://whatsup-backoffice-app.vercel.app (root redirects to `/admin`) |
-| Supabase | project `xhwmgnhspyaqsgggvujo` (eu-central-1, Postgres 17) · 8 migrations applied · edge functions `create-order`, `scan`, `wa-otp-hook` ACTIVE · pg_cron `expire-holds` (every minute) and `weekly-payouts` (Mon 06:00 UTC) |
-| Demo data | tenant `lb` (WhatsUp Lebanon), 1 organiser, 6 venues, 6 live events, 13 tiers, 2 VIP tables, promo `WHATSUP10`, 3 test users (`buyer@test.whatsup`, `door@test.whatsup`, wabunassar@gmail.com = super_admin) |
+| Party | Role |
+|---|---|
+| Willy (Walid Abu Nassar) | Technical partner: product & architecture, platform IP (payments, QR, scanning, WhatsApp delivery proven in BlendApp / Loft OS), vendor management, ongoing dev & ops |
+| Kareem Chaarani — WhatsUp Lebanon, Beirut (Monot), +961 3 533 119 | Brand, audience across five platforms, content team, organiser/venue relationships, sales |
+| RS Creative Boutique, Paris — info@rscreativeboutique.com, +33 7 55 55 68 68 | Vendor; quotation RSCB-57813 dated 21 Aug 2026, valid 30 days |
 
-## Why the Vercel names carry an `-app` suffix
+Vendor correspondence goes out jointly, signed by Willy (Technical Partner) and Kareem (WhatsUp Lebanon).
 
-The two manually deployed projects from earlier today, `whatsup-ticketing` (`prj_IhThFJSqR8Ny1r2CFlZCSnrL6fn8`, 6 READY deployments)
-and `whatsup-backoffice` (`prj_oVIlFrwPCwvHGgBAMQiiDHNNT2UO`, last deployment ERROR — "No Output Directory named public"), are **not
-linked to Git**, and `create_git_project` cannot adopt or rename an existing project: the exact names return `409 Project already exists`.
-The git-linked projects were therefore created as `whatsup-ticketing-app` and `whatsup-backoffice-app`.
-To reclaim the short names: delete the two legacy projects in the Vercel dashboard, rename the `-app` projects, and set
-`NEXT_PUBLIC_BACKOFFICE_URL` (or update the default in `app/src/lib/config.ts`). `src/middleware.ts` already matches any host starting
-with `whatsup-backoffice`, so the redirect keeps working after a rename.
+**Boundary (13 Sep 2026):** WhatsUp Ticketing does not involve Sporting Club or any of its venues. Sporting Club is / will become a client and subscriber of the platform once built — an early reference organiser, not an owner. Keep the venture, its IP and its finances separate from Sporting Club. (Demo data in the live app uses fictional Lebanese venues for that reason.)
 
-Note for future automation: the Vercel MCP `create_git_project` reuses the first project linked to a repository; the second project was
-created by passing the repository URL with different casing (`WillyTheBoy/whatsup-ticketing`), which GitHub resolves identically.
+## 3. WhatsUp Lebanon — the backbone brand
 
-### Legacy URL bridge (added after the first back-office report)
+The service launches through WhatsUp Lebanon's audience; its owned reach is the distribution strategy ("the audience becomes the box office").
 
-`https://whatsup-backoffice.vercel.app` (legacy project, not git-linked) now serves a one-file redirect deployment: every path 307s to
-`https://whatsup-backoffice-app.vercel.app`, so the old ticketing app's "Back office" tab and any bookmark land on the real back office.
-Signed-in verification on the live host (headless Chromium, temporary test admin, deleted afterwards): login form → overview with live
-figures → orders, partners, ledger, settlements, team all render; the ticketing app shows the Back office tab for admins.
-Back-office access still requires an account with `super_admin` or `country_admin` in `memberships` (wabunassar@gmail.com has it).
+**Instagram baseline**
 
-## What v0.4.0 contains
+| Date | Followers | Posts | Following | Notes |
+|---|---|---|---|---|
+| 13 Sep 2026 | 836K | 53.5K | 7,797 | Baseline at project start (Willy's screenshot) |
 
-```
-app/                Next.js 14.2.35 · TypeScript · @supabase/ssr · qrcode.react · next/font (Bricolage Grotesque, Instrument Sans, Tajawal)
-  src/app/          / · /e/[slug] · /checkout · /tickets · /t/[code] · /login · /live · /live/[slug]
-                    /org · /org/new · /org/e/[id] · /org/door · /org/finance
-                    /admin (+ orders, ledger, partners, partners/[id], settlements, invoices, invoices/[id], reconcile, rules, reports, streams, team, audit)
-  src/lib/          config (fees, formatters, TZ Asia/Beirut), i18n (EN/AR), lang hooks, roles, supabase clients, art
-  src/components/   TopBar, Shell (tab bar), LoginForm (email/password + WhatsApp OTP), Logo
-  src/middleware.ts back-office host → /admin
-supabase/           migrations (verbatim), functions (verbatim), seed/demo.sql, README
-docs/               ARCHITECTURE.md, DEPLOYMENT.md
-```
+Brand identity: display name "😎 What's Up Lebanon 😎"; white circle logo with low-poly green landscape and red cedar; wordmark light "WHAT'S UP" over heavy "Lebanon"; tagline "Where every image is a story"; sunglasses persona; fan-submitted photo culture. Handles: `whatsuplebanon` on Instagram, TikTok, X, Threads; Facebook `whatsuplebanonofficial`. Beware look-alikes `whatsuplebanon.official`, `watsapp_lebanon`. Instagram blocks automated reads — new data points come from screenshots.
 
-### Provenance — recovered verbatim vs reconstructed
+## 4. Vision, benchmarks, monetisation (brief v2.0) and design (App Design Brief v1.0)
 
-| Piece | Source | Fidelity |
-| --- | --- | --- |
-| 8 migrations | `supabase_migrations.schema_migrations` in the live project | verbatim |
-| 3 edge functions | Supabase Management API (function sources) | verbatim |
-| Seed data | rows read from the live tables | exact ids/values |
-| Client components (checkout, tickets, ticket, login, live, stream, org hub/new/manage/door/finance), i18n dictionary, config, roles hook, tab shell, CSS | de-minified from the production bundles of `whatsup-ticketing.vercel.app` | behaviour-faithful rewrite in TypeScript |
-| Server components (`/`, `/e/[slug]`, root layout) | server-rendered HTML + route map from the build log | reconstructed; identical markup and copy |
-| `/admin/*` back office (15 routes) | the legacy backoffice build never succeeded and its source was not retrievable; rebuilt from the route list in its build log, the `.bo` styles that shipped in the consumer bundle, and the `v_admin_*` views / `admin_*` RPCs in the migrations | new implementation |
+- Media-led discovery + ticketing; compete on distribution, not feature count. Long-term: one multi-tenant platform, each country a tenant.
+- Benchmarks — global: Ticketmaster/Live Nation, Eventbrite, DICE, Resident Advisor, Fever, Posh; MENA: Platinumlist; Lebanon: Tick'it (~60% of music listings, table booking, 3,000+ cash points of sale), ihjoz (OMT/LibanPost offline payments).
+- Launch fees: buyer service fee 5% + $0.50/ticket shown all-in; organiser fee 3% of face (waived on free events); processing at cost; target blended take rate 8–10% of gross.
+- Later revenue: organiser plans (Free / Pro $49/mo / Venue); media (featured placement, IG/TikTok bundles, sponsored categories, WhatsApp broadcasts); ancillary (table/VIP, transfer/resale, refund protection, add-ons, venue insights). **→ shipped as the upgrade ladder in v0.5.0, see §11.**
+- Design direction (App Design Brief v1.0, 14 Sep, `WhatsUp_App_Design_Brief_v1.md`): the feed is the box office; white canvas, fan colour; red rationed; all-in always; everything Story-ready; cash first class; one object, seven offers; Arabic-native; thumb first; reveal, don't gate. Where the prototype and the brief differ, the brief wins. **→ applied to the live app in v0.5.0 (`docs/DESIGN.md` in the repo).**
 
-### Intentional differences from the last manual deployment
+## 5. Scope
 
-* All dates/times render in `Asia/Beirut` (the manual deployment rendered UTC, showing a 19:00 event as 16:00).
-* One codebase serves both Vercel projects (the layout already special-cased `/admin`); the separate `whatsup-backoffice@0.1.0` package is retired.
-* `BACKOFFICE_URL` default now points at `whatsup-backoffice-app.vercel.app`.
+**5a. RSCB-57813** ($11,265; A $10,000 site + admin, B $1,265 hosting/support; 8 weeks; 50/50 payments; 3 design revisions; $80/hr extras): public site (listings, event pages, accounts with email or WhatsApp OTP, checkout, payment gateway, QR e-tickets by email, My Tickets, search, emails, static pages) and admin (dashboard, event CRUD, tiers, orders/refunds, customers, promotions, QR check-in, reports, roles).
 
-## Verification done this session
+**5b. MVP additions beyond the quote:** fee engine · USD/LBP · Lebanese card + OMT / Whish / cash-on-door · WhatsApp ticket delivery · organiser self-serve portal · payout/settlement module · promoter links · featured-placement management · offline-capable door scanner · Story/TikTok share cards · EN + AR (RTL).
 
-* `tsc --noEmit` clean; `next build` clean; bundle sizes within ±0.2 kB of the original deployment per route.
-* Local `next start`: Discover lists the 6 live events from Supabase, event page renders tiers/tables, `lang=ar` cookie flips `<html lang="ar" dir="rtl">`, unknown event → 404, back-office host and `NEXT_PUBLIC_APP_ROLE=backoffice` both 307 → `/admin`.
-* Live: https://whatsup-ticketing-app.vercel.app/ (200, events rendered), https://whatsup-backoffice-app.vercel.app/ (307 → `/admin`).
+**5c. Super-app layer:** AI, music listener / live venue stations, chatbot, chat rooms, "vibe creator" — two tracks (A ticketing core, B AI/music/chat). **Track B first cut shipped in v0.5.0** (concierge, vibe, radio, rooms; Claude behind `/api/ai` once `ANTHROPIC_API_KEY` is set on Vercel).
 
-## Open items
+**5d. Later phases:** transfer/resale, seat maps, refund protection, buyer app, dynamic pricing, squad / split-pay; Phase 3 second country. (Table booking and waitlists shipped in v0.5.0.)
 
-1. **Reclaim short Vercel names** (see above) — needs the dashboard; then set `NEXT_PUBLIC_BACKOFFICE_URL`.
-2. **Retire legacy projects** `whatsup-ticketing` / `whatsup-backoffice` once traffic moves (they are not auto-deployed).
-3. **WhatsApp**: enable phone sign-in in Supabase Auth and wire the *Send SMS* hook to `wa-otp-hook` with `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_ID`; ticket delivery messages are still only queued in `message_log` (no sender worker yet).
-4. **Payments**: `create-order` is in sandbox (card/Whish settle instantly). Live mode needs a provider redirect + webhook that calls `settle_reservation` / marks orders paid, then `PAYMENTS_MODE=live`.
-5. **Back office QA**: the admin pages are new — walk each flow with real data (order refund, adjustment, settlement generation → mark paid, provider batch import, rule application) and tighten copy.
-6. **Hardening**: the anon key default lives in `config.ts` (public by design, RLS-protected); move to Vercel env vars when convenient. Add ESLint config (builds currently skip lint) and a smoke test.
-7. **Docs**: rev 18 and the original project docs are still only in the project chat — re-upload them to `docs/` so the repo is the source of truth.
+**5e. Multi-country architecture:** multi-tenant from day one; pluggable payment adapters; central super-admin + scoped country admins; full localisation; API-first; code/infra/data owned by WhatsUp.
 
-## Change log
+**Judgement on the quote:** realistic for a marketplace-lite, not this platform; expect ~1.5–2× and 12–14 weeks; renegotiate scope before ~20 Sep.
 
-* **rev 19 (2026-09-13)** — repo rebuilt and pushed as v0.4.0; git-linked Vercel projects created and READY; tracker moved into the repo; legacy back-office URL bridged to the new host after a "back office not loading" report.
-* rev 18 and earlier — in the project chat (not recoverable here).
+## 6. Partnership & pricing strategy (v1.0) — unchanged
+
+Two layers: PlatformCo (Willy 75–80% / WUL 20–25%) licenses to country OpCos; Lebanon OpCo 50/50 (Willy floor 40%), exclusive brand licence, platform fee 25% of net platform revenue at launch (later 1.5–2% GMV or $0.30/ticket min; $500/month min from month 4). Protections: vesting, IP assignment, non-withdrawable brand licence, split decision rights, buy-out formula; consider PlatformCo outside Lebanon. Negotiation plan: contributions table → two layers → asks → fee anchor → funding option → 30-day term sheet. Full detail in memory (`partnership-strategy`).
+
+## 7. Deliverables
+
+| Deliverable | Status |
+|---|---|
+| Brief v1.0 → v2.0; Partnership & pricing strategy v1.0; claude/kareem-meeting-brief.md; claude/rscb-email-drafts.md (variants 1 & 2) | Delivered / approved |
+| Prototype v0.2 → v0.6 (live artifact claude.ai/code/artifact/a276cbdb-30ff-4372-b550-5f94aff67b54) · `whatsup-prototype-v0.6.html` · `WhatsUp_App_Design_Brief_v1.md` | Published 13–14 Sep; **applied to the app 14 Sep** |
+| claude/whatsup-functional-spec.md v1.0 (pricing basis for RSCB) | Delivered; §10 extends it |
+| db/001_core_schema.sql · db/002_sweeper_payouts.sql · db/003_ledger_partners.sql · db/004_backoffice.sql | Applied |
+| **Migration `listings_v2`** (repo `supabase/migrations/20260914100000_listings_v2.sql`): `events.kind` / `cover_url` / `deals` / `pinned`, `tiers.kind` / `member_free` / `plan_months` / `note`, `tickets.valid_until`, `orders.meta`, `venues.lat/lng`, `organisers.plan/plan_until`, `saved_deals`, `moments` + storage bucket, `v_my_organisers`, `v_room_counts`, functions `upgrade_plan` / `buy_promotion` / `event_room` | Applied 14 Sep |
+| **Demo seed v2** (`supabase/seed/demo_v2.sql`): beach club, dining venue with tables, guest house, Summer Pass (3 plans), items, deals, promoter NOUR-WU, two venue stations | Applied 14 Sep |
+| functions/ create-order (fees by kind, pass coverage, attribution, meta), scan (member cards repeat), wa-otp-hook, lib.ts | Deployed (create-order v2, scan v2 on 14 Sep) |
+| **App v0.5.0** — Next.js source, one codebase for public app + back office; `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md` | **Live 14 Sep** on whatsup-ticketing-app.vercel.app and whatsup-backoffice-app.vercel.app |
+| GitHub `willytheboy/whatsup-ticketing` `main` @ 4ac2101 (v0.5.0) | Pushed 14 Sep (from Willy's workstation via a git bundle; both Vercel projects deploy on push) |
+| claude/upgrade-strategy.md — monetisation model → product ladder | Written 14 Sep |
+| claude/project-tracker.md (this doc) | Living |
+
+## 8. Decision log (newest first)
+
+| Date | Decision / event |
+|---|---|
+| 14 Sep 2026 | **v0.5.0 live** (ticketing dpl_HnqueJfihugckJjp9j5ZQQHJtZAg, back office dpl_HxeFqX5VrZ2E3hzXREBygq1rDWLs, both READY from commit 4ac2101). Design Brief v1.0 applied end to end; monetisation model shipped as the upgrade ladder (§11). Verified before push with a production build and Playwright at 390×844 in EN and AR: home, listings (beach / dining / event / pass), search, ask, radio, vibe, story, room, wallet, checkout → sandbox card order → ticket (day pass $15 + $0.75 fee, kind-based), venue dashboard, plans, promoters, new listing, door, promote, profile. Live smoke test: all routes 200, `/live` → `/radio`, `/tickets` → `/wallet`, `/api/ai` answers from the catalogue (`ai:false` until the key is set) |
+| 14 Sep 2026 | **Push path that works without the repo attached to the session:** create a git bundle in the cloud workspace → `device_commit_files` into a folder Willy approves on mega-workstation (`C:\Users\user\whatsup-ticketing`, a fresh clone) → PowerShell `git fetch bundle main && git merge --ff-only && git push` with his credential manager. Direct file deploys to Vercel are not viable for the full tree (payload size); the earlier "attach the repo when starting the session" route also works |
+| 14 Sep 2026 | **Navigation per the brief** replaces the 13 Sep role-tab scheme: six tabs for everyone (Home · Search · Ask · Radio · Vibe · Wallet), Profile behind the avatar, venue tools behind Profile → Venue shown only to organiser / door / admin roles, back office only to admins. Willy's rule "reveal only what the role needs" is kept: buyers never see venue tools |
+| 14 Sep 2026 | **Fees by offer type** (edge function + UI): tickets 5% + $0.50, day passes and items 5%, stays 4%, tables / passes / deals none; organiser fee by plan (3% Free, 2.5% Pro, 2% Venue); a valid pass covers `member_free` offers; a friend's referral code gives 10% off the first order; promoter codes attribute without a discount unless a promo code is added |
+| 14 Sep 2026 | **System font stack, no dark mode** (brief §3.3, §3.2) — Google fonts removed from the app |
+| 14 Sep 2026 | Back office launched on whatsup-backoffice-app.vercel.app (legacy short-name project redirects there); tracker rev 19 rebuilt from live systems in a session that had the repo attached and pushed v0.4.0 |
+| 13 Sep 2026 | Deploy lessons: base64 bundles cost ~3× the tokens of plain source, and a build that downloads its source at build time is an RCE surface (correctly refused) — full-tree file deploys or git are the only sound paths |
+| 13 Sep 2026 | Role-aware navigation directive (Willy): information follows access — superseded in form by the brief's six tabs on 14 Sep, kept in substance |
+| 13 Sep 2026 | Public app v0.4.0 deployed: Live section, organiser Finance, role-aware tabs, one-codebase/two-projects build mode |
+| 13 Sep 2026 | Back office built (/admin, 13 screens) and ledger tests passed (sale journals balance to the cent; cash-at-door receivable; promoter commission; venue rule; promotion → rev:promotions; stream pass 70% to venue; refund reversals; settlement paid → bank; provider batch discrepancies; audit rows) |
+| 13 Sep 2026 | New platform requirements recorded (Willy): complete booking platform with partners and venues; profit/commission from tickets, promotions & marketing, added-value services (chatrooms, live music); venues stream their own music; transparent accounting → implemented as §10 |
+| 13 Sep 2026 | App v0.2 → v0.3.0; web app deployed; Supabase project created, core schema v1; **Funding Option A** decided; prototype v0.1 → v0.6; brief v2.0; two-track model; Instagram baseline; venture independent of Sporting Club; Willy = developer & partner |
+| 21 Aug 2026 | Quotation RSCB-57813 received |
+
+## 8b. Test access (dev only — rotate/remove before launch)
+
+Public app: **https://whatsup-ticketing-app.vercel.app** · Back office: **https://whatsup-backoffice-app.vercel.app** (same login; opens on /admin; the old whatsup-backoffice.vercel.app redirects here). Sign-in: tap **Email** first.
+
+| Account | Password | Roles | Use it for |
+|---|---|---|---|
+| wabunassar@gmail.com | WhatsUp2026! | organiser, door, super_admin | Everything incl. venue tools and back office |
+| buyer@test.whatsup | Test1234! | buyer | Pure buyer flow (six tabs, no venue tools) |
+| door@test.whatsup | Test1234! | door, organiser | Door scanner and venue dashboard |
+
+Promo code: WHATSUP10. Promoter link: `/?ref=NOUR-WU`. Sandbox: card/Whish settle instantly; OMT/cash reserve until settled at the door (Orders → Mark paid). Demo listings: Sunset Sessions (event with deal), Batroun Rocks Beach House (day pass covered by the pass, cabana, items, deal), Marina Fish House (tables), Beit Douma (stay), Summer Pass 2027 (pass with three plans).
+
+## 9. Open decisions & actions (priority order)
+
+**Deploy & repo**
+- [x] Repo pushed and git-linked; v0.5.0 live on both Vercel projects (14 Sep)
+- [ ] **Set `ANTHROPIC_API_KEY`** (optional `ANTHROPIC_MODEL`) on the `whatsup-ticketing-app` Vercel project → concierge, vibe creator and poster-to-listing switch from catalogue rules to Claude
+- [ ] Custom domains (tickets.whatsuplebanon.com, office.whatsuplebanon.com); delete the two legacy non-git Vercel projects and rename the `-app` ones to reclaim the short names
+- [ ] Note for future sessions: a Cowork session can only push to a repository attached when it starts; otherwise use the bundle → workstation → push path (decision log 14 Sep)
+
+**Build plan (Option A) — next**
+- [ ] Phone auth + WhatsApp token for `wa-otp-hook`; card acquirer + Whish sandboxes; OMT reference flow (then switch `PAYMENTS_MODE`)
+- [ ] Real provider imports: acquirer/Whish/OMT settlement report formats → reconciliation importer presets; bank feed later
+- [ ] Streaming ingest provider (Mux / Cloudflare Stream) so venues get RTMP keys from the Streams page; until then Icecast/YouTube URLs
+- [ ] Pro-plan deliverables that need WhatsApp Business: broadcast to past buyers, audience insights export; Promote-package fulfilment queue for the content team (Story, TikTok, post) in the back office
+- [ ] Buyer rungs: refund protection add-on at checkout, ticket transfer / resale pool (waitlist Notify-me ships), squad / split-pay, calendar sheet for stays, real venue photography (`events.cover_url`)
+- [ ] Partner onboarding flow (KYC-lite: legal name, tax ID, payout details) and monthly statement emails/WhatsApp
+- [ ] Remove dev test accounts; rotate Willy's test password before launch
+
+**Before Thu 17 Sep / ~20 Sep**
+- [ ] Send joint RSCB email variant 2 with the functional spec (the live v0.5.0 now shows RSCB exactly what "design/front-end" means); meeting with Kareem (negotiation plan §6)
+
+**Product decisions pending:** approve fees (§4, now implemented as defaults); pick payment partners; domain convention; organiser relationship ownership; lawyer for PlatformCo/brand licence.
+
+**Housekeeping:** next Instagram data point monthly and per campaign.
+
+## 10. Money model & partner requirements (v0.4.0 — implemented, unchanged in v0.5.0)
+
+**Revenue streams shared with partners:** (1) **tickets** — buyer fee (by offer type since v0.5.0) and organiser fee (by plan since v0.5.0) are platform revenue; (2) **promotions & marketing** — package price is platform revenue; (3) **services** — stream passes, subscriptions, chat premium, venue streaming plans, organiser plans (`organiser_plan` since v0.5.0). `revenue_share_rules` give a beneficiary partner a % of a basis (platform revenue / face / gross) per stream, scoped to tenant, organiser, venue or event, with validity dates and priority; applied automatically when the order/promotion/charge is paid and posted as its own journal the partner can see. Service charges carry a provider share (default 70% to the venue). Promoter commissions come out of the organiser's share.
+
+**Ledger:** append-only double-entry `journals` + `journal_lines`, balanced by a deferred trigger, immutable (corrections are reversals). Accounts per tenant: `clearing:<card|whish|omt>`, `bank`, `buyer_credit`, `rev:tickets|promotions|services`, `processing_recovery`, `processing_expense`, `revenue_share`, `referral_marketing`, and per partner `payable:<id>` / `receivable:<id>` (cash collected at the door). Partner net balance = payable − receivable (+ we owe them, − they owe us).
+
+**Collection & settlement:** card/Whish/OMT → provider clearing → bank when the provider pays out; cash at door → organiser receivable. Weekly (`generate_settlements`, Mon 06:00) or on demand: positive balances become settlements (partner can request early), negative balances become an invoice from WhatsUp (`LB-INV-2026-00001`…). Marking paid/received posts the bank movement and closes the invoice.
+
+**Reconciliation:** import the provider's payout report (CSV/JSON: ref, gross, fee, net, date, order_id) → matched / discrepancy / unmatched per transaction, missing orders counted, batch posts bank ← clearing with the real fee as expense; unreconciled orders and non-zero clearing balances surface on the Overview.
+
+**Transparency & audit:** partners see their own statement (opening, lines by stream, closing), settlements and invoices in the app (/org/finance) and can be given portal access by email; every financial object change is written to `audit_log` with actor and before/after; every number on a statement or invoice links to a journal.
+
+**Streams & rooms:** `streams` per venue/event (audio/video; HLS, Icecast, MP3, YouTube; private ingest URL + key; public / ticket-holders / paid pass), status offline/live/ended, auto-created chat room with realtime messages; `buy_stream_pass()` creates a paid service charge (sandbox) and a 24-hour pass. Since v0.5.0 every listing also gets a public room on first open (`event_room()`), shown as "Room" on the listing with the venue's pinned live-info line.
+
+## 11. v0.5.0 — design system and upgrade ladder (14 Sep 2026)
+
+**Design (brief v1.0 → code):** tokens g1–g4 / red / red-dark / ink / line / sand / amber; radii 14 / 10 / 999 / 18; facet band SVG at 120 / 80 / 72 / 56 px; system fonts; components as in brief §6 (card, photo card + badge, chips, buttons red/green/line, stepper, slot chips, plan cards, offer rows, meter, map card, gift box, ticket card, member card, coupon, chat bubbles, action chips, compose bar, station tile, player, KPI tile, sell-through, result banner, bottom sheet, toast, tab bar, form field, drop zone). Screens: Home, Search, Listing (+ pickers by type), Checkout, Wallet, Ticket, Story, Radio, Ask, Room, Vibe, Your moment, Profile, Venue dashboard, New listing (poster-to-listing), Manage, Promote, Plans, Promoters, Door, Finance. Full mapping in the repo's `docs/DESIGN.md`.
+
+**Upgrade ladder (monetisation model → product):** buyers — all-in fees by offer type, passes and member cards, deals, stream passes, referral 10% / $5; organisers — Free (3%) → Pro $49/mo (2.5%, promoters, insights, broadcast, $20 placement credit) → Venue negotiated (2%, own station, passes/memberships/day passes/items, rev-share rules, statements); media — Promote packages Boost $40 / Story bundle $120 / Takeover $300 per listing → `promotion_orders` → featured on Home. Every rung posts to the ledger. Full text in `claude/upgrade-strategy.md`.

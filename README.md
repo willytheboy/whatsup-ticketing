@@ -39,4 +39,4 @@ npm run build                # production build (what Vercel runs)
 * Weekly settlements per partner: positive balances are paid out, negative ones (organisers holding door cash) are invoiced automatically.
 * Door check-in calls the `scan` edge function, which verifies the token signature and flips the ticket to `scanned` exactly once.
 
-See `docs/ARCHITECTURE.md` for the full picture and `supabase/README.md` for the database layer.
+See `docs/ARCHITECTURE.md` for the full picture, `docs/DESIGN.md` for the design system, `docs/UPGRADE-STRATEGY.md` for the monetisation ladder, and `supabase/README.md` for the database layer.
