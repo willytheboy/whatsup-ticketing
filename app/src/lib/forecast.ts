@@ -51,3 +51,27 @@ export function nudgesFor(a: { events: EvLite[]; tiers: TierLite[]; stats: { eve
   if (a.plan === "free" && a.events.length >= 2) out.push({ title: L("nProT"), body: L("nProB"), cta: L("upgradePro"), href: "/org/plan", tone: "green" });
   return out;
 }
+
+/* ---- pricing assistant (v0.7): per-tier pace from tier_pace() and a plain suggestion ---------------------------------
+   slow  = projected sell-through under 60 % with more than two days to go → one-tap flash code (15 % for 48 h; 25 % when under 40 %)
+   hot   = on course to sell out with more than three days left → the next tier can carry a higher price (+10 %)
+   track = everything else. Nothing here changes a price by itself; the organiser taps. */
+export type TierPace = { tier_id: string; name: string; face_price: number; capacity: number; sold: number; held: number; sold_7d: number; sold_1d: number; starts_at: string; listed_at: string };
+export type TierAdvice = { pct: number; projected: number; daysLeft: number; pace: number; state: "slow" | "hot" | "track" | "soldout" | "past"; flash: { pct: number; hours: number } | null; raise: number | null };
+
+export function tierAdvice(r: TierPace): TierAdvice {
+  const cap = Number(r.capacity) || 0, sold = Number(r.sold) + Number(r.held);
+  const daysLeft = Math.max(0, (new Date(r.starts_at).getTime() - Date.now()) / 864e5);
+  const onSale = Math.max(1, (Date.now() - new Date(r.listed_at).getTime()) / 864e5);
+  // recent pace counts more than lifetime pace: 7-day rate when we have it, else lifetime
+  const pace = Number(r.sold_7d) > 0 ? Number(r.sold_7d) / Math.min(7, onSale) : sold / onSale;
+  const projected = cap ? Math.min(cap, Math.round(sold + pace * daysLeft)) : 0;
+  const pct = cap ? Math.round((projected / cap) * 100) : 0;
+  const left = cap - sold;
+  if (daysLeft <= 0) return { pct, projected, daysLeft: 0, pace, state: "past", flash: null, raise: null };
+  if (left <= 0) return { pct: 100, projected: cap, daysLeft: Math.round(daysLeft), pace, state: "soldout", flash: null, raise: null };
+  const soldOutIn = pace > 0 ? left / pace : Infinity;
+  if (soldOutIn <= daysLeft && daysLeft > 3) return { pct, projected, daysLeft: Math.round(daysLeft), pace, state: "hot", flash: null, raise: 10 };
+  if (pct < 60 && daysLeft > 2) return { pct, projected, daysLeft: Math.round(daysLeft), pace, state: "slow", flash: { pct: pct < 40 ? 25 : 15, hours: 48 }, raise: null };
+  return { pct, projected, daysLeft: Math.round(daysLeft), pace, state: "track", flash: null, raise: null };
+}

@@ -10,7 +10,7 @@ export function Photo({ l, height, children, credit }: { l: { id: string; cover_
     <div className="photo" style={{ height, background: tone(l.id) }}>
       {l.cover_url ? <img src={l.cover_url} alt="" loading="lazy" /> : <Facet h={80} className="facet" style={{ height: "45%", position: "absolute", bottom: 0, opacity: 0.55, width: "100%" }} />}
       {children}
-      {credit && <span className="badge end feat" style={{ fontWeight: 400 }}>📷 {credit}</span>}
+      {credit && <span className="badge end feat" style={{ fontWeight: 400, top: "auto", bottom: 8, opacity: 0.9 }}>📷 {credit}</span>}
     </div>
   );
 }
@@ -38,7 +38,7 @@ export function BigCard({ l, lang }: { l: Listing; lang: Lang }) {
   const isTable = badgeKind(l) === "table";
   return (
     <Link href={`/e/${l.slug}`} className="card" style={{ display: "block", width: "100%", marginBottom: 10 }}>
-      <Photo l={l} height={150}>
+      <Photo l={l} height={150} credit={l.credit ? l.credit.replace(/^Photo:\s*/i, "").split(" · ")[0] : null}>
         <Badge l={l} lang={lang} />
         {isFeatured(l) && <span className="badge end feat">★ {t(lang, "featured")}</span>}
       </Photo>

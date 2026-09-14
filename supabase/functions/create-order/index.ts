@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
   const { data: tenant } = await db.from("tenants").select("*").eq("slug", b.tenant ?? "lb").single();
   if (!tenant) return json({ error: "tenant" }, 404);
-  const { data: ev } = await db.from("events").select("id,status,doors_at,starts_at,seated,tenant_id,kind,organiser_id,title,refund_policy").eq("id", b.event_id).single();
+  const { data: ev } = await db.from("events").select("id,status,doors_at,starts_at,seated,tenant_id,kind,organiser_id,title,refund_policy,addon_options").eq("id", b.event_id).single();
   if (!ev || ev.tenant_id !== tenant.id || !["live", "sold_out"].includes(ev.status)) return json({ error: "event_unavailable" }, 409);
   const methods: string[] = [...tenant.payment_methods, "credit"];
   if (!methods.includes(b.payment_method)) return json({ error: "payment_method" }, 400);
@@ -116,9 +116,21 @@ Deno.serve(async (req) => {
   }
 
   // Add-ons: refund protection (brief §5.4) — the buyer can cancel for any reason until doors
-  const addons: { kind: string; amount: number }[] = [];
+  const addons: { kind: string; amount: number; id?: string; name?: string; qty?: number; unit?: number }[] = [];
   if (b.refund_protection && face > 0) addons.push({ kind: "refund_protection", amount: round2(Math.max(REFUND_PROTECTION_MIN, face * REFUND_PROTECTION_PCT)) });
-  const addonTotal = addons.reduce((a, x) => a + x.amount, 0);
+  // Listing add-ons (v0.7: fast lane, parking…): priced from events.addon_options, never from the client
+  const options: any[] = Array.isArray(ev.addon_options) ? ev.addon_options : [];
+  const ticketQty = priced.filter((p) => ["ticket", "daypass", "item"].includes(p.tier.kind)).reduce((a, p) => a + p.qty, 0);
+  for (const a of Array.isArray(b.addons) ? b.addons : []) {
+    const o = options.find((x) => x.id === a?.id);
+    if (!o) continue;
+    const max = o.per === "ticket" ? ticketQty : Math.max(1, Number(o.max ?? 4));
+    const qty = Math.min(max, Math.max(0, Math.floor(Number(a.qty) || 0)));
+    if (!qty) continue;
+    const unit = Math.max(0, Number(o.price) || 0);
+    addons.push({ kind: "addon", id: o.id, name: o.name, qty, unit, amount: round2(qty * unit) });
+  }
+  const addonTotal = round2(addons.reduce((a, x) => a + x.amount, 0));
 
   const deposit = table ? Number(table.deposit) : 0;
   const pkgPrice = pkg ? Number(pkg.price ?? 0) : 0;

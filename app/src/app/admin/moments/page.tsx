@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import { sb } from "@/lib/supabase-browser";
-import { SUPABASE_URL } from "@/lib/config";
 import { useAdmin } from "../_lib";
 import { Panel, Tag, Empty, when } from "../_ui";
 
@@ -10,10 +9,18 @@ export default function Moments() {
   const admin = useAdmin();
   const [rows, setRows] = useState<any[] | null>(null);
   const [filter, setFilter] = useState("new");
-  const load = async () => { if (!admin.tenant) return; const { data } = await sb().from("v_admin_moments").select("*").eq("tenant_id", admin.tenant.id).order("created_at", { ascending: false }).limit(200); setRows(data ?? []); };
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const load = async () => {
+    if (!admin.tenant) return;
+    const { data } = await sb().from("v_admin_moments").select("*").eq("tenant_id", admin.tenant.id).order("created_at", { ascending: false }).limit(200);
+    setRows(data ?? []);
+    // the bucket is private: editors see the photos through one-hour signed links
+    const paths = (data ?? []).map((r: any) => r.path).filter(Boolean);
+    if (paths.length) { const { data: signed } = await sb().storage.from("moments").createSignedUrls(paths, 3600); const m: Record<string, string> = {}; (signed ?? []).forEach((x) => { if (x.signedUrl && x.path) m[x.path] = x.signedUrl; }); setUrls(m); }
+  };
   useEffect(() => { load(); }, [admin.tenant]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = async (r: any, status: string) => { await sb().from("moments").update({ status }).eq("id", r.id); load(); };
-  const url = (p: string) => `${SUPABASE_URL}/storage/v1/object/public/moments/${p}`;
+  const url = (p: string) => urls[p] ?? "";
   const list = (rows ?? []).filter((r) => filter === "all" || r.status === filter);
   return (
     <>

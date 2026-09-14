@@ -26,6 +26,8 @@ Base URL: `https://whatsup-ticketing-app.vercel.app/api/v1` (the tenant's app do
   "lines": [ { "tier_id": "…", "qty": 2, "unit_face": 25 } ], "tickets": [ { "code": "WU-B1DB-649", "state": "scanned", "scanned_at": "…" } ] } ], "count": 1, "since": "2026-09-01T00:00:00Z" }
 ```
 
+Orders carry `addons` when the buyer took extras: `[{ "kind": "addon", "id": "fastlane", "name": "Fast lane", "qty": 2, "unit": 10, "amount": 20 }, { "kind": "refund_protection", "amount": 2 }]` — listing add-ons are organiser revenue and appear in the settlement; refund protection is platform revenue. Add-ons are defined per listing at **Manage listing → Add-ons**.
+
 Order `status` is one of `pending`, `paid`, `reserved` (pay at the door / OMT), `cancelled`, `refunded`, `expired`. Ticket `state` is one of `valid`, `scanned`, `reserved`, `transferred`, `resale`, `sold_back`, `void`.
 
 Amounts are in the tenant's base currency (USD for Lebanon). `face_total` is what the organiser sells at; `buyer_fee` is paid on top by the buyer; `total` is what the buyer paid all-in.

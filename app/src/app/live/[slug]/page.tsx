@@ -8,6 +8,7 @@ import Player from "@/components/Player";
 import Chat from "@/components/Chat";
 import { sb } from "@/lib/supabase-browser";
 import { money } from "@/lib/config";
+import { FeatureOff, useFeature } from "@/components/Config";
 import { useLang, useT } from "@/lib/lang";
 
 type Stream = {
@@ -20,6 +21,7 @@ type Stream = {
 /** A venue station: player, pass purchase when the stream is paid, and its room (brief §5.7). */
 export default function StreamPage({ params }: { params: { slug: string } }) {
   const t = useT();
+  const featureOn = useFeature("radio");
   const lang = useLang();
   const [s, setS] = useState<Stream | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "none">("loading");
@@ -57,6 +59,7 @@ export default function StreamPage({ params }: { params: { slug: string } }) {
 
   if (state === "loading" || !s)
     return <><TopBar back="/radio" title={state === "loading" ? "…" : t("radio")} /><main><div className="empty">{state === "loading" ? t("loading") : t("notFound")}</div></main></>;
+  if (!featureOn) return <FeatureOff back="/" />;
 
   const title = lang === "ar" && s.title_ar ? s.title_ar : s.title;
   const venue = lang === "ar" && s.venues?.name_ar ? s.venues.name_ar : s.venues?.name;

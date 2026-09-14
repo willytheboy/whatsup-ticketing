@@ -4,6 +4,7 @@ import Link from "next/link";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { Facet } from "./Band";
 import { useToast } from "./Toast";
+import { useConfig } from "./Config";
 import { sb } from "@/lib/supabase-browser";
 import { fmtDate, fmtTime, money, lbp, type OfferKind } from "@/lib/config";
 import { useLang, useT, useCur } from "@/lib/lang";
@@ -49,7 +50,9 @@ const SLOT = 120;
 export function TicketCard({ tk, holder, compact, rotKey, onChange }: { tk: WalletTicket; holder: string; compact?: boolean; rotKey?: string; onChange?: () => void }) {
   const t = useT();
   const lang = useLang();
-  const cur = useCur();
+  const { features } = useConfig();
+  const cur0 = useCur();
+  const cur = features.currency_lbp ? cur0 : "USD";
   const toast = useToast();
   const e = tk.events;
   const kind = kindOf(tk);
@@ -69,8 +72,8 @@ export function TicketCard({ tk, holder, compact, rotKey, onChange }: { tk: Wall
     : tk.state === "valid" ? ["ok", kind === "table" || kind === "stay" ? t("booked") : t("paid")] : ["used", tk.state];
   const wa = `https://wa.me/?text=${encodeURIComponent(shareText(tk, lang))}`;
   const past = isPast(tk);
-  const canTransfer = tk.state === "valid" && !past && ["ticket", "daypass", "item"].includes(kind);
-  const canSell = tk.state === "valid" && !past && ["ticket", "daypass", "item"].includes(kind) && Number(tk.orders?.total ?? 0) > 0;
+  const canTransfer = features.transfer && tk.state === "valid" && !past && ["ticket", "daypass", "item"].includes(kind);
+  const canSell = features.resale && tk.state === "valid" && !past && ["ticket", "daypass", "item"].includes(kind) && Number(tk.orders?.total ?? 0) > 0;
   const protectedOrder = (tk.orders?.addons ?? []).some((a: any) => a.kind === "refund_protection");
   const canRefund = tk.state === "valid" && !past && !!tk.order_id && !tk.orders?.refund_status && Number(tk.orders?.total ?? 0) > 0;
   const orgWa = e?.organisers?.whatsapp ?? null;
@@ -140,7 +143,7 @@ export function TicketCard({ tk, holder, compact, rotKey, onChange }: { tk: Wall
             {sheet === "more" && (
               <div className="grid2" style={{ marginTop: 8 }}>
                 <button className="btn line sm" onClick={saveImage}>{t("saveImage")}</button>
-                <button className="btn line sm" onClick={calendar}>{t("addCalendar")}</button>
+                {features.calendar && <button className="btn line sm" onClick={calendar}>{t("addCalendar")}</button>}
                 {canTransfer && <button className="btn line sm" onClick={() => setSheet("transfer")}>{t("transfer")}</button>}
                 {canSell && <button className="btn line sm" disabled={busy} onClick={sellBack}>{t("sellBack")}</button>}
                 {tk.state === "resale" && <button className="btn line sm" disabled={busy} onClick={unlist}>{t("unlist")}</button>}

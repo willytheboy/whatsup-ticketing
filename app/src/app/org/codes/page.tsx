@@ -54,15 +54,15 @@ export default function PromoCodes() {
             <div className="small">{t("codesNote")}</div>
             <div className="card pad stack">
               <div className="grid2">
-                <div className="field"><label>{t("promo")}</label><input value={f.code} onChange={(e) => set("code", e.target.value.toUpperCase())} placeholder="SUMMER10" /></div>
-                <div className="field"><label>{t("listing")}</label><select value={f.event_id} onChange={(e) => set("event_id", e.target.value)}><option value="">{t("allListings")}</option>{events.map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}</select></div>
+                <label className="field"><span className="lbl">{t("promo")}</span><input value={f.code} onChange={(e) => set("code", e.target.value.toUpperCase())} placeholder="SUMMER10" /></label>
+                <label className="field"><span className="lbl">{t("listing")}</span><select value={f.event_id} onChange={(e) => set("event_id", e.target.value)}><option value="">{t("allListings")}</option>{events.map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}</select></label>
               </div>
               <div className="grid3">
-                <div className="field"><label>{t("discountType")}</label><select value={f.kind} onChange={(e) => set("kind", e.target.value)}><option value="pct">%</option><option value="fixed">$</option></select></div>
-                <div className="field"><label>{t("value")}</label><input type="number" inputMode="decimal" value={f.value} onChange={(e) => set("value", e.target.value)} /></div>
-                <div className="field"><label>{t("maxUses")}</label><input type="number" inputMode="numeric" value={f.max_uses} onChange={(e) => set("max_uses", e.target.value)} placeholder="∞" /></div>
+                <label className="field"><span className="lbl">{t("discountType")}</span><select value={f.kind} onChange={(e) => set("kind", e.target.value)}><option value="pct">%</option><option value="fixed">$</option></select></label>
+                <label className="field"><span className="lbl">{t("value")}</span><input type="number" inputMode="decimal" value={f.value} onChange={(e) => set("value", e.target.value)} /></label>
+                <label className="field"><span className="lbl">{t("maxUses")}</span><input type="number" inputMode="numeric" value={f.max_uses} onChange={(e) => set("max_uses", e.target.value)} placeholder="∞" /></label>
               </div>
-              <div className="field"><label>{t("endsAt")}</label><input type="datetime-local" value={f.ends_at} onChange={(e) => set("ends_at", e.target.value)} /></div>
+              <label className="field"><span className="lbl">{t("endsAt")}</span><input type="datetime-local" value={f.ends_at} onChange={(e) => set("ends_at", e.target.value)} /></label>
               {err && <div className="err">{err}</div>}
               <button className="btn green" onClick={add}>{t("add")}</button>
             </div>

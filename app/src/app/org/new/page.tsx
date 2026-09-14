@@ -128,11 +128,11 @@ export default function NewListing() {
             {TYPES.map(([k, l]) => <option key={k} value={k} disabled={k === "pass" && !hasPlan(org?.plan, "venue")}>{t(l)}{k === "pass" && !hasPlan(org?.plan, "venue") ? " · Venue" : ""}</option>)}
           </select>
         </div>
-        <div className="field"><label>{t("fName")}</label><input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Full Moon Beach Party" /></div>
-        <div className="field"><label>{t("fNameAr")}</label><input dir="rtl" value={f.name_ar} onChange={(e) => set("name_ar", e.target.value)} placeholder="حفلة القمر الكامل" /></div>
+        <label className="field"><span className="lbl">{t("fName")}</span><input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Full Moon Beach Party" /></label>
+        <label className="field"><span className="lbl">{t("fNameAr")}</span><input dir="rtl" value={f.name_ar} onChange={(e) => set("name_ar", e.target.value)} placeholder="حفلة القمر الكامل" /></label>
         <div className="grid2">
-          <div className="field"><label>{t("fDate")}</label><input type="datetime-local" value={f.when} onChange={(e) => set("when", e.target.value)} /></div>
-          <div className="field"><label>{t("category")}</label><select value={f.cat} onChange={(e) => set("cat", e.target.value)}>{LISTING_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></div>
+          <label className="field"><span className="lbl">{t("fDate")}</span><input type="datetime-local" value={f.when} onChange={(e) => set("when", e.target.value)} /></label>
+          <label className="field"><span className="lbl">{t("category")}</span><select value={f.cat} onChange={(e) => set("cat", e.target.value)}>{LISTING_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
         </div>
         <div className="field">
           <label>{t("venue")}</label>
@@ -151,13 +151,13 @@ export default function NewListing() {
               {offers.length > 1 && <button className="btn xs line" onClick={() => setOffers(offers.filter((_, j) => j !== i))}>{t("remove")}</button>}
             </div>
             <div className="grid2">
-              <div className="field"><label>{t("tierName")}</label><input value={o.name} onChange={(e) => setO(i, "name", e.target.value)} /></div>
-              <div className="field"><label>{t("fNameAr")}</label><input dir="rtl" value={o.name_ar} onChange={(e) => setO(i, "name_ar", e.target.value)} /></div>
+              <label className="field"><span className="lbl">{t("tierName")}</span><input value={o.name} onChange={(e) => setO(i, "name", e.target.value)} /></label>
+              <label className="field"><span className="lbl">{t("fNameAr")}</span><input dir="rtl" value={o.name_ar} onChange={(e) => setO(i, "name_ar", e.target.value)} /></label>
             </div>
             <div className="grid3">
-              <div className="field"><label>{o.kind === "table" ? `${t("deposit")} $` : o.kind === "pass" ? `$ ${t("perMonth")}` : t("fPrice")}</label><input type="number" inputMode="decimal" value={o.price} onChange={(e) => setO(i, "price", e.target.value)} /></div>
-              <div className="field"><label>{o.kind === "table" ? t("seats") : `${t("fCap")} · ${unitFor(o.kind)}`}</label><input type="number" inputMode="numeric" value={o.cap} onChange={(e) => setO(i, "cap", e.target.value)} /></div>
-              {o.kind !== "table" && o.kind !== "pass" && <div className="field"><label>{t("fMax")}</label><input type="number" inputMode="numeric" value={o.max} onChange={(e) => setO(i, "max", e.target.value)} /></div>}
+              <label className="field"><span className="lbl">{o.kind === "table" ? `${t("deposit")} $` : o.kind === "pass" ? `$ ${t("perMonth")}` : t("fPrice")}</span><input type="number" inputMode="decimal" value={o.price} onChange={(e) => setO(i, "price", e.target.value)} /></label>
+              <label className="field"><span className="lbl">{o.kind === "table" ? t("seats") : `${t("fCap")} · ${unitFor(o.kind)}`}</span><input type="number" inputMode="numeric" value={o.cap} onChange={(e) => setO(i, "cap", e.target.value)} /></label>
+              {o.kind !== "table" && o.kind !== "pass" && <label className="field"><span className="lbl">{t("fMax")}</span><input type="number" inputMode="numeric" value={o.max} onChange={(e) => setO(i, "max", e.target.value)} /></label>}
             </div>
             <div className="small">{preview(o)}</div>
           </div>
@@ -166,7 +166,7 @@ export default function NewListing() {
 
         <div className="field"><label>{t("fDesc")}</label><textarea value={f.desc} onChange={(e) => set("desc", e.target.value)} /></div>
         <div className="field"><label>{t("descAr")}</label><textarea dir="rtl" value={f.desc_ar} onChange={(e) => set("desc_ar", e.target.value)} /></div>
-        <div className="field"><label>{t("pinnedLine")}</label><input value={f.pinned} onChange={(e) => set("pinned", e.target.value)} placeholder={t("pinnedPh")} /></div>
+        <label className="field"><span className="lbl">{t("pinnedLine")}</span><input value={f.pinned} onChange={(e) => set("pinned", e.target.value)} placeholder={t("pinnedPh")} /></label>
         <div className="field">
           <label>{t("cover")}</label>
           <input ref={cover} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => set("cover", e.target.files?.[0] ?? null)} />

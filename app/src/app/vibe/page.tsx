@@ -3,16 +3,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import TopBar from "@/components/TopBar";
 import { Facet } from "@/components/Band";
+import { FeatureOff, useFeature } from "@/components/Config";
 import { useToast } from "@/components/Toast";
 import { useLang, useT } from "@/lib/lang";
 import { startSynth, stopSynth } from "@/lib/synth";
 
 const CHIPS: [string, string][] = [["Chill", "هادي"], ["Beach", "بحر"], ["Dinner", "عشا"], ["Mountains", "جبل"], ["Late", "متأخر"], ["Under $30", "تحت ٣٠$"]];
-type Vibe = { name: string; line: string; bpm: number; plan: { slug: string; title: string }[] };
+type Vibe = { name: string; line: string; bpm: number; plan: { slug: string; title: string; cover_url?: string | null }[] };
 
 /** Vibe (brief §5.10): tell me the mood, get a track, a day → dinner → night, and a card to share. */
 export default function VibePage() {
   const t = useT();
+  const featureOn = useFeature("vibe");
   const lang = useLang();
   const toast = useToast();
   const [mood, setMood] = useState("");
@@ -21,6 +23,8 @@ export default function VibePage() {
   const [v, setV] = useState<Vibe | null>(null);
   const [playing, setPlaying] = useState(false);
   useEffect(() => { setMood(t("vibeDefault")); return () => stopSynth(); }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!featureOn) return <FeatureOff back="/" />;
 
   const make = async () => {
     if (!mood.trim()) return toast(t("describe"));
@@ -35,12 +39,13 @@ export default function VibePage() {
   };
   const play = () => { if (!v) return; if (playing) { stopSynth(); setPlaying(false); } else { startSynth(v.bpm); setPlaying(true); } };
   const first = v?.plan?.[2] ?? v?.plan?.[0];
+  const cover = v?.plan?.find((p) => p.cover_url)?.cover_url ?? null;
 
   return (
     <>
       <TopBar eyebrow={t("vibe")} sub={t("vibeSub")} />
       <main style={{ paddingTop: 6 }}>
-        <textarea className="vibe-in" rows={2} value={mood} onChange={(e) => setMood(e.target.value)} />
+        <textarea className="vibe-in" rows={2} value={mood} aria-label={t("vibe")} onChange={(e) => setMood(e.target.value)} />
         <div className="chips flush">
           {CHIPS.map(([k, ar]) => (
             <button key={k} className={`chip ${sel.has(k) ? "on" : ""}`} onClick={() => setSel((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; })}>{lang === "ar" ? ar : k}</button>
@@ -49,9 +54,9 @@ export default function VibePage() {
         <button className="btn green full" onClick={make} disabled={busy}>{busy ? t("mixing") : t("makeVibe")}</button>
         {v && (
           <div className="card">
-            <div className="band">
-              <Facet h={80} />
-              <div className="over" style={{ bottom: 10 }}><div style={{ fontSize: 20, fontWeight: 800 }}>{v.name}</div></div>
+            <div className="band" style={cover ? { background: `linear-gradient(rgba(0,0,0,.05), rgba(0,0,0,.55)), center/cover url(${cover})`, minHeight: 120 } : undefined}>
+              {!cover && <Facet h={80} />}
+              <div className="over" style={{ bottom: 10 }}><div style={{ fontSize: 20, fontWeight: 800, textShadow: cover ? "0 1px 8px rgba(0,0,0,.5)" : undefined }}>{v.name}</div></div>
             </div>
             <div style={{ padding: "12px 14px" }}>
               <p className="meta" style={{ margin: "0 0 8px" }}>{v.line}</p>

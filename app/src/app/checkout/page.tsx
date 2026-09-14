@@ -7,6 +7,7 @@ import LoginForm from "@/components/LoginForm";
 import { sb } from "@/lib/supabase-browser";
 import { TENANT, money, lbp, r2 } from "@/lib/config";
 import { useT } from "@/lib/lang";
+import { useConfig } from "@/components/Config";
 import type { Cart } from "../e/[slug]/OfferPicker";
 
 const METHODS: [string, string, string][] = [
@@ -28,6 +29,7 @@ const ERRORS: Record<string, string> = {
 export default function Checkout() {
   const router = useRouter();
   const t = useT();
+  const { features } = useConfig();
   const [cart, setCart] = useState<Cart | null | undefined>(undefined);
   const [user, setUser] = useState<User | null>(null);
   const [method, setMethod] = useState("card");
@@ -55,10 +57,11 @@ export default function Checkout() {
   const fee = cart.lines.reduce((a, l) => a + l.qty * l.fee, 0);
   const deposit = (cart.table?.deposit ?? 0) + (cart.table?.package?.price ?? 0);
   const discount = pct ? r2((face * pct) / 100) : 0;
-  const protectable = face > 0 && cart.lines.some((l) => ["ticket", "daypass", "item", "stay"].includes(l.kind));
+  const protectable = features.refund_protection && face > 0 && cart.lines.some((l) => ["ticket", "daypass", "item", "stay"].includes(l.kind));
   const protection = protect && protectable ? r2(Math.max(1, face * 0.08)) : 0;
-  const total = r2(face + fee + deposit + protection - discount);
-  const creditUsed = useCredit && credit > 0 ? Math.min(credit, total) : 0;
+  const addonTotal = r2((cart.addons ?? []).reduce((a, x) => a + x.qty * x.unit, 0));
+  const total = r2(face + fee + deposit + protection + addonTotal - discount);
+  const creditUsed = features.credit && useCredit && credit > 0 ? Math.min(credit, total) : 0;
   const due = r2(total - creditUsed);
   const reserve = (method === "cash_door" || method === "omt") && due > 0;
   const nights = cart.lines.find((l) => l.kind === "stay")?.qty;
@@ -80,7 +83,8 @@ export default function Checkout() {
         table_id: cart.table?.id, party: cart.table?.party ?? null, time: cart.table?.time ?? null,
         nights: nights ?? null, checkin: cart.checkin, gift: cart.gift, package_id: cart.table?.package?.id ?? null,
         promo_code: pct ? promo : undefined, payment_method: due === 0 && creditUsed > 0 ? "credit" : method, referral_code: ref, referral_at: (() => { try { return localStorage.getItem("wu-ref-at") ?? undefined; } catch { return undefined; } })(),
-        refund_protection: protect && protectable, use_credit: useCredit && credit > 0, squad_id: cart.squad_id ?? null,
+        refund_protection: protect && protectable, use_credit: features.credit && useCredit && credit > 0, squad_id: cart.squad_id ?? null,
+        addons: (cart.addons ?? []).map((a) => ({ id: a.id, qty: a.qty })),
       },
     });
     setBusy(false);
@@ -125,7 +129,7 @@ export default function Checkout() {
                 <b className="num">{money(r2(Math.max(1, face * 0.08)))}</b>
               </label>
             )}
-            {credit > 0 && (
+            {features.credit && credit > 0 && (
               <label className="card sand pad row" style={{ gap: 10, cursor: "pointer" }}>
                 <input type="checkbox" checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} style={{ width: 18, height: 18 }} />
                 <div style={{ flex: 1, fontSize: 14 }}>💚 {t("useCredit")} <b className="num">{money(credit)}</b></div>
@@ -154,6 +158,7 @@ export default function Checkout() {
               {cart.table && (
                 <div className="line"><span>{t("tableDep")} · {cart.table.name}{cart.table.package ? ` · ${cart.table.package.name}` : ""}</span><span className="num">{money(deposit)}</span></div>
               )}
+              {(cart.addons ?? []).map((a) => <div key={a.id} className="line"><span>{a.qty} × {a.name}</span><span className="num">{money(a.qty * a.unit)}</span></div>)}
               {protection > 0 && <div className="line"><span>{t("refundProtection")}</span><span className="num">{money(protection)}</span></div>}
               {fee > 0 && (
                 <div className="line"><span>{t("fee")}</span><span className="num">{money(fee)}</span></div>
@@ -163,7 +168,7 @@ export default function Checkout() {
               )}
               {creditUsed > 0 && <div className="line" style={{ color: "var(--g1)" }}><span>{t("fanCredit")}</span><span className="num">−{money(creditUsed)}</span></div>}
               <div className="line total"><span>{t("total")}</span><span className="num">{due ? money(due) : total ? `${money(0)} · ${t("coveredByCredit")}` : t("free")}</span></div>
-              {due > 0 && <div className="note num">≈ {lbp(due)}</div>}
+              {features.currency_lbp && due > 0 && <div className="note num">≈ {lbp(due)}</div>}
             </div>
             {err && <div className="err">{err}</div>}
             <button className={`btn ${reserve ? "green" : "red"} full`} disabled={busy} onClick={pay}>

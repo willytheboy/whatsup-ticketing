@@ -6,7 +6,8 @@ import { useToast } from "@/components/Toast";
 import { sb } from "@/lib/supabase-browser";
 import { useLang, useT, setLang, setCity, useCur, setCur } from "@/lib/lang";
 import { useRoles } from "@/lib/roles";
-import { BACKOFFICE_URL, FX_RATE, IG_HANDLE } from "@/lib/config";
+import { BACKOFFICE_URL, FX_RATE } from "@/lib/config";
+import { useConfig } from "@/components/Config";
 
 type Profile = { name: string | null; phone: string | null; email: string | null; referral_code: string | null; credit: number; prefs: any; currency: string };
 
@@ -20,6 +21,7 @@ export default function ProfilePage() {
   const [city, setCityState] = useState("");
   const [orgs, setOrgs] = useState<{ id: string; name: string; plan: string }[]>([]);
   const cur = useCur();
+  const { features, brand } = useConfig();
   const [confirmDel, setConfirmDel] = useState(false);
 
   useEffect(() => {
@@ -81,7 +83,7 @@ export default function ProfilePage() {
                 <div className="row">
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{t("refTitle")}: {p.referral_code}</div>
-                    <div className="meta">{t("refSub")}{Number(p.credit) > 0 ? ` · $${Number(p.credit).toFixed(0)} ${t("credit")}` : ""}</div>
+                    <div className="meta">{t("refSub")}{features.credit && Number(p.credit) > 0 ? ` · $${Number(p.credit).toFixed(0)} ${t("credit")}` : ""}</div>
                   </div>
                   <button className="btn line sm" onClick={shareCode}>{t("share")}</button>
                 </div>
@@ -93,11 +95,11 @@ export default function ProfilePage() {
           <h2 style={{ margin: "8px 0 4px" }}>{t("settings")}</h2>
           <button className="list-btn" onClick={() => setLang(lang === "en" ? "ar" : "en")}><span>{t("language")}</span><span className="v">{t("langName")}</span></button>
           <button className="list-btn" onClick={() => setCity(city ? "" : "Beirut")}><span>{t("city")}</span><span className="v">{city || t("allCities")}</span></button>
-          <button className="list-btn" onClick={() => setCur(cur === "USD" ? "LBP" : "USD")}><span>{t("currency")}</span><span className="v">{cur === "LBP" ? `LBP · ${FX_RATE.toLocaleString("en-US")}` : "USD"}</span></button>
+          {features.currency_lbp && <button className="list-btn" onClick={() => setCur(cur === "USD" ? "LBP" : "USD")}><span>{t("currency")}</span><span className="v">{cur === "LBP" ? `LBP · ${FX_RATE.toLocaleString("en-US")}` : "USD"}</span></button>}
           {p && <button className="list-btn" onClick={() => togglePref("wa_tickets")}><span>{t("waTickets")}</span><span className="v">{(p.prefs?.wa_tickets ?? true) ? t("on") : t("off")}</span></button>}
           {p && <button className="list-btn" onClick={() => togglePref("wa_reminders")}><span>{t("waReminders")}</span><span className="v">{(p.prefs?.wa_reminders ?? true) ? t("on") : t("off")}</span></button>}
           {p && <button className="list-btn" onClick={() => togglePref("email_copies", false)}><span>{t("emailCopies")}</span><span className="v">{(p.prefs?.email_copies ?? false) ? t("on") : t("off")}</span></button>}
-          {p && <Link href="/saved" className="list-btn"><span>{t("savedListings")}</span><span className="v">›</span></Link>}
+          {p && features.saved && <Link href="/saved" className="list-btn"><span>{t("savedListings")}</span><span className="v">›</span></Link>}
         </div>
         {p && (
           <div>
@@ -116,7 +118,7 @@ export default function ProfilePage() {
             {roles.isAdmin && <a href={BACKOFFICE_URL} className="list-btn"><span>{t("backOffice")}</span><span className="v">↗</span></a>}
           </div>
         )}
-        <a href={`https://instagram.com/${IG_HANDLE}`} target="_blank" rel="noopener" className="moment"><div><div style={{ fontWeight: 600, fontSize: 14 }}>😎 @{IG_HANDLE}</div><div className="small" style={{ color: "var(--g1)" }}>Where every image is a story</div></div><span>↗</span></a>
+        <a href={`https://instagram.com/${brand.ig}`} target="_blank" rel="noopener" className="moment"><div><div style={{ fontWeight: 600, fontSize: 14 }}>😎 @{brand.ig}</div><div className="small" style={{ color: "var(--g1)" }}>Where every image is a story</div></div><span>↗</span></a>
         {roles.user && <button className="btn line full" onClick={() => sb().auth.signOut().then(() => location.assign("/"))}>{t("signOut")}</button>}
         <p className="small" style={{ textAlign: "center" }}>{t("demoNote")}</p>
       </main>

@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import TopBar from "@/components/TopBar";
 import Chat from "@/components/Chat";
 import { sb } from "@/lib/supabase-browser";
+import { FeatureOff, useFeature } from "@/components/Config";
 import { useLang, useT } from "@/lib/lang";
 import { useRoles } from "@/lib/roles";
 import { lowest, type Listing } from "@/lib/catalogue";
@@ -13,6 +14,7 @@ type Ev = { id: string; slug: string; title: string; title_ar: string | null; pi
 /** Event / venue room (brief §5.9): back with the listing name, member count and "guests only" badge, pinned live info, messages. */
 export default function RoomPage({ params }: { params: { id: string } }) {
   const t = useT();
+  const featureOn = useFeature("rooms");
   const lang = useLang();
   const [ev, setEv] = useState<Ev | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export default function RoomPage({ params }: { params: { id: string } }) {
   }, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = ev ? (lang === "ar" && ev.title_ar ? ev.title_ar : ev.title) : "…";
+  if (!featureOn) return <FeatureOff back="/" />;
   const pinned = ev ? (lang === "ar" && ev.pinned_ar ? ev.pinned_ar : ev.pinned) : null;
   const canModerate = !!ev && (roles.admin || roles.orgIds?.includes(ev.organiser_id));
   const price = ev ? lowest(ev as unknown as Listing, lang) : "";

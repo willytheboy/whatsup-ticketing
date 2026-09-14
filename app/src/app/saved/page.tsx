@@ -2,7 +2,7 @@ import Link from "next/link";
 import TopBar from "@/components/TopBar";
 import { SmallCard } from "@/components/Cards";
 import { sbUser } from "@/lib/supabase-server";
-import { getLang, T } from "@/lib/lang-server";
+import { getLang, getT } from "@/lib/lang-server";
 import { LIST_SELECT, type Listing } from "@/lib/catalogue";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 /** Saved listings (the heart on a listing). */
 export default async function SavedPage() {
   const lang = getLang();
-  const t = (k: string) => T(lang, k);
+  const t = await getT(lang);
   const db = sbUser();
   const { data: { user } } = await db.auth.getUser();
   const { data } = user ? await db.from("saved_listings").select(`event_id, events(${LIST_SELECT})`).eq("user_id", user.id).order("created_at", { ascending: false }) : { data: [] as any[] };

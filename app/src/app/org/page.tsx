@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/components/Toast";
+import { useConfig } from "@/components/Config";
 import { sb } from "@/lib/supabase-browser";
 import { money, fmtDate, PROCESSING_PCT, hasPlan } from "@/lib/config";
 import { useLang, useT } from "@/lib/lang";
@@ -19,6 +20,7 @@ type Promoter = { name: string; clicks: number; sales: number; tier: string };
 /** Venue dashboard (brief §5.13): KPIs, 7-day chart, nudges, inventory with sell-through and forecast, payout waterfall, plan, station, tools. */
 export default function OrganiserHub() {
   const t = useT();
+  const { features } = useConfig();
   const lang = useLang();
   const toast = useToast();
   const { user, org, plan, reload } = useOrg();
@@ -180,7 +182,7 @@ export default function OrganiserHub() {
                       <div className="meta">{t(e.kind === "event" ? "events" : e.kind)} · {t(e.status === "live" ? "live" : e.status === "draft" ? "draftS" : e.status)}{fc ? ` · ${t("forecast")} ${fc.pct}%${fc.soldOutBy ? ` · ${t("soldOutBy")} ${fmtDate(fc.soldOutBy)}` : ""}` : ""}</div>
                     </div>
                     <div className="row" style={{ gap: 6, flex: "none" }}>
-                      <Link href={`/org/promote/${e.id}`} className="btn xs green">{t("promote")}</Link>
+                      {features.promote && <Link href={`/org/promote/${e.id}`} className="btn xs green">{t("promote")}</Link>}
                       <Link href={`/org/e/${e.id}`} className="btn xs line">{t("manage")}</Link>
                     </div>
                   </div>
@@ -217,14 +219,14 @@ export default function OrganiserHub() {
               ))}
             </div>
 
-            {promoters.length > 0 && (
+            {features.promoters && promoters.length > 0 && (
               <div className="card pad">
                 <div className="row between"><span className="eyebrow">{t("promoters")}</span><Link href="/org/promoters" className="small" style={{ color: "var(--g1)", fontWeight: 600 }}>{t("open")} →</Link></div>
                 <div className="small" style={{ marginTop: 6 }}>{clicks} {t("clicks")} → {psales} {t("sales")} · {clicks ? Math.round((psales / clicks) * 100) : 0}% {t("conversion")}</div>
               </div>
             )}
 
-            <h2 style={{ margin: "4px 0 0" }}>{t("station")}</h2>
+            {features.station && <><h2 style={{ margin: "4px 0 0" }}>{t("station")}</h2>
             <div className="card pad">
               {streams.length ? streams.map((s) => (
                 <div key={s.id} style={{ padding: "4px 0" }}>
@@ -239,7 +241,7 @@ export default function OrganiserHub() {
                 </div>
               )) : <div className="meta">{t("stationNote")}</div>}
               <div className="small" style={{ marginTop: 8 }}>{hasPlan(org.plan, "venue") ? t("streamHelp") : t("needsVenue")} {!hasPlan(org.plan, "venue") && <Link href="/org/plan" style={{ color: "var(--g1)", fontWeight: 600 }}>{t("upgrade")} →</Link>}</div>
-            </div>
+            </div></>}
 
             <div className="card pad">
               <div className="row between">
@@ -250,12 +252,12 @@ export default function OrganiserHub() {
             </div>
 
             <div className="grid2">
-              <Link href="/org/promoters" className="btn line">{t("promoters")}{!hasPlan(org.plan, "pro") ? " · Pro" : ""}</Link>
+              {features.promoters && <Link href="/org/promoters" className="btn line">{t("promoters")}{!hasPlan(org.plan, "pro") ? " · Pro" : ""}</Link>}
               <Link href="/org/door" className="btn line">{t("doorScanner")}</Link>
-              <Link href="/org/codes" className="btn line">{t("promoCodes")}</Link>
-              <Link href="/org/insights" className="btn line">{t("insights")}{!hasPlan(org.plan, "pro") ? " · Pro" : ""}</Link>
+              {features.codes && <Link href="/org/codes" className="btn line">{t("promoCodes")}</Link>}
+              {features.insights && <Link href="/org/insights" className="btn line">{t("insights")}{!hasPlan(org.plan, "pro") ? " · Pro" : ""}</Link>}
               <Link href="/org/refunds" className="btn line">{t("refunds")}{refunds ? ` · ${refunds}` : ""}</Link>
-              <Link href="/org/developers" className="btn line">{t("developers")}</Link>
+              {features.developers && <Link href="/org/developers" className="btn line">{t("developers")}</Link>}
               <Link href="/org/finance" className="btn green" style={{ gridColumn: "span 2" }}>{t("finance")}</Link>
             </div>
           </>

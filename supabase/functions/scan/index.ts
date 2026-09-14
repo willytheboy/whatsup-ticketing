@@ -17,8 +17,10 @@ Deno.serve(async (req) => {
   if (!b?.event_id) return json({ error: "bad_request" }, 400);
   const db = admin();
 
-  const { data: ev } = await db.from("events").select("id,organiser_id,title,tenant_id,kind,starts_at").eq("id", b.event_id).single();
+  const { data: ev } = await db.from("events").select("id,organiser_id,title,tenant_id,kind,starts_at,tenants(config)").eq("id", b.event_id).single();
   if (!ev) return json({ error: "event" }, 404);
+  // tenant feature flags (tenants.config.features); anything unset is on
+  const tenantFeature = (e: any, k: string) => e?.tenants?.config?.features?.[k] !== false;
   const { data: mem } = await db.from("memberships").select("role").eq("user_id", user.id).eq("organiser_id", ev.organiser_id).in("role", ["organiser", "door", "country_admin", "super_admin"]);
   if (!(mem && mem.length)) return json({ error: "forbidden" }, 403);
 
@@ -70,13 +72,19 @@ Deno.serve(async (req) => {
   const v = await verifyToken(String(b.token));
   if (!v) return json({ result: "invalid", reason: String(b.token).startsWith("WU2") ? "expired_token" : "bad_signature" });
   const id = v.id;
-  const { data: tk } = await db.from("tickets").select("id,event_id,state,code,seat,scanned_at,tier_id,holder_id,valid_until,order_id,recipient,tiers(name,kind)").eq("id", id).single();
+  const { data: tk } = await db.from("tickets").select("id,event_id,state,code,seat,scanned_at,tier_id,holder_id,valid_until,order_id,recipient,tiers(name,kind),orders(addons)").eq("id", id).single();
   if (!tk) { await record(null, "invalid"); return json({ result: "invalid", reason: "unknown" }); }
   const tier: any = tk.tiers;
   const kind = tier?.kind ?? (tk.tier_id ? "ticket" : "table");
   const { data: holder } = tk.holder_id ? await db.from("profiles").select("name").eq("id", tk.holder_id).single() : { data: null };
   const holderName = holder?.name ?? (tk.recipient as any)?.name ?? null;
-  const base = { kind, code: tk.code, seat: tk.seat, tier: tier?.name ?? (kind === "table" ? tk.seat : null), holder: holderName, rotating: v.rotating };
+  // v0.7: listing add-ons bought with the order (fast lane, parking…) so the door can act on them
+  const addons = (((tk as any).orders?.addons ?? []) as any[]).filter((a) => a.kind === "addon").map((a) => ({ id: a.id, name: a.name, qty: a.qty }));
+  const base = { kind, code: tk.code, seat: tk.seat, tier: tier?.name ?? (kind === "table" ? tk.seat : null), holder: holderName, rotating: v.rotating, addons };
+
+  // v0.7: door lockout — a ticket frozen after repeated duplicate scans stays out until a manager releases it
+  const { data: lock } = await db.from("ticket_locks").select("reason,locked_at").eq("ticket_id", tk.id).is("released_at", null).maybeSingle();
+  if (lock) { await record(tk.id, "locked"); return json({ result: "locked", ...base, reason: lock.reason, locked_at: lock.locked_at }); }
 
   // Member card: repeat scans, any partner venue of the tenant, until valid_until
   if (kind === "pass") {
@@ -104,7 +112,10 @@ Deno.serve(async (req) => {
   if (tk.state === "scanned") {
     await record(tk.id, "duplicate");
     const { count } = await db.from("scans").select("id", { count: "exact", head: true }).eq("ticket_id", tk.id).eq("result", "duplicate");
-    return json({ result: "duplicate", ...base, scanned_at: tk.scanned_at, attempts: count ?? 1 });
+    // three duplicates in ten minutes freeze the ticket (tenant feature fraud_lockout; default on)
+    let locked = false;
+    if (tenantFeature(ev, "fraud_lockout")) { const { data: l } = await db.rpc("lock_ticket_if_abused", { p_ticket: tk.id }); locked = !!l; }
+    return json({ result: "duplicate", ...base, scanned_at: tk.scanned_at, attempts: count ?? 1, locked });
   }
 
   const { data: flipped } = await db.from("tickets").update({ state: "scanned", scanned_at: new Date().toISOString() }).eq("id", tk.id).eq("state", "valid").select("id");

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import TopBar from "@/components/TopBar";
+import { FeatureOff, useFeature } from "@/components/Config";
 import { useToast } from "@/components/Toast";
 import { sb } from "@/lib/supabase-browser";
 import { TENANT } from "@/lib/config";
@@ -11,6 +12,7 @@ import { useT } from "@/lib/lang";
 /** Your moment (brief §5.11): dashed upload area, caption, credit, send. Lands in the private `moments` bucket for the editors. */
 export default function MomentPage() {
   const t = useT();
+  const featureOn = useFeature("moments");
   const toast = useToast();
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [file, setFile] = useState<File | null>(null);
@@ -21,6 +23,7 @@ export default function MomentPage() {
   const [sent, setSent] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { sb().auth.getUser().then(({ data }) => setUser(data.user)); }, []);
+  if (!featureOn) return <FeatureOff back="/" />;
 
   const pick = (f: File | null) => {
     setFile(f);

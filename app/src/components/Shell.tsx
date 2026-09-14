@@ -4,26 +4,31 @@ import { usePathname } from "next/navigation";
 import { useT } from "@/lib/lang";
 import { I } from "./Icons";
 import { ToastProvider } from "./Toast";
+import { useConfig } from "./Config";
+import { tabVisible, type TabId } from "@/lib/features";
 
-const TABS: [string, string, keyof typeof I][] = [
-  ["/", "nHome", "home"],
-  ["/search", "nSearch", "search"],
-  ["/ask", "nAsk", "ask"],
-  ["/radio", "nRadio", "radio"],
-  ["/vibe", "nVibe", "vibe"],
-  ["/wallet", "nWallet", "wallet"],
+const TABS: [TabId, string, string, keyof typeof I][] = [
+  ["home", "/", "nHome", "home"],
+  ["search", "/search", "nSearch", "search"],
+  ["ask", "/ask", "nAsk", "ask"],
+  ["radio", "/radio", "nRadio", "radio"],
+  ["vibe", "/vibe", "nVibe", "vibe"],
+  ["wallet", "/wallet", "nWallet", "wallet"],
 ];
 const HIDE = ["/checkout", "/t/", "/login", "/story/", "/org/new", "/org/promote", "/room/", "/admin", "/claim/", "/squad/"];
 
-/** Six tabs for everyone (brief §4.4). Venue tools live behind Profile → Venue, so buyers never see them. */
+/** Up to six tabs for everyone (brief §4.4); the back office decides which ones a tenant shows (tenants.config.tabs).
+    Venue tools live behind Profile → Venue, so buyers never see them. */
 function Tabs() {
   const path = usePathname();
   const t = useT();
+  const cfg = useConfig();
   if (HIDE.some((p) => path.startsWith(p))) return null;
   const on = (href: string) => (href === "/" ? path === "/" || path.startsWith("/e/") : path.startsWith(href));
+  const tabs = TABS.filter(([id]) => tabVisible(cfg, id));
   return (
     <nav className="tabs" aria-label="Main">
-      {TABS.map(([href, key, icon]) => {
+      {tabs.map(([, href, key, icon]) => {
         const Icon = I[icon];
         return (
           <Link key={href} href={href} className={`tab ${on(href) ? "on" : ""}`}>

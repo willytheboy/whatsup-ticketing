@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import { I } from "@/components/Icons";
+import { FeatureOff, useFeature, useBrand } from "@/components/Config";
 import { useToast } from "@/components/Toast";
 import { useLang, useT } from "@/lib/lang";
-import { SUPPORT_WA, unitFee } from "@/lib/config";
+import { unitFee } from "@/lib/config";
 import type { Cart } from "../e/[slug]/OfferPicker";
 
 type CartHint = { slug: string; tier_id: string; name: string; qty: number; kind: string };
@@ -15,6 +16,8 @@ type Bubble = { who: "me" | "bot" | "think"; text: string; open?: { slug: string
 /** Ask (brief §5.8): the concierge. Opening line scoped to the city, quick chips, action chips after every answer. */
 function Ask() {
   const t = useT();
+  const featureOn = useFeature("concierge");
+  const brand = useBrand();
   const lang = useLang();
   const toast = useToast();
   const sp = useSearchParams();
@@ -35,6 +38,7 @@ function Ask() {
     if (pre) ask(pre);
   }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { window.scrollTo({ top: document.body.scrollHeight }); }, [log]);
+  if (!featureOn) return <FeatureOff back="/" />;
 
   const ask = async (text: string) => {
     const msg = text.trim();
@@ -71,7 +75,7 @@ function Ask() {
     rec.onerror = () => setListening(false); rec.onend = () => setListening(false);
     setListening(true); rec.start();
   };
-  const waLink = () => `https://wa.me/${SUPPORT_WA}?text=${encodeURIComponent(log.filter((b) => b.who === "me").map((b) => b.text).slice(-3).join("\n") || t("askPh"))}`;
+  const waLink = () => `https://wa.me/${brand.support_wa}?text=${encodeURIComponent(log.filter((b) => b.who === "me").map((b) => b.text).slice(-3).join("\n") || t("askPh"))}`;
 
   return (
     <>

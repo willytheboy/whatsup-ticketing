@@ -8,6 +8,8 @@ import { sb } from "@/lib/supabase-browser";
 import { allInKind, money, LISTING_CATEGORIES, type OfferKind, SUPABASE_URL, hasPlan } from "@/lib/config";
 import { useLang, useT } from "@/lib/lang";
 import { useOrg } from "@/lib/org";
+import { useConfig } from "@/components/Config";
+import { tierAdvice, type TierPace } from "@/lib/forecast";
 
 const toLocal = (iso: string | null) => {
   if (!iso) return "";
@@ -20,6 +22,7 @@ type Tier = { id?: string; name: string; name_ar?: string | null; kind: OfferKin
 type Pkg = { id: string; name: string; name_ar?: string; price: number | string; desc?: string };
 type Table = { id?: string; name: string; name_ar?: string | null; seats: number | string; min_spend: number | string; deposit: number | string; reserved_by_order?: string | null; packages: Pkg[]; _del?: boolean };
 type Deal = { id: string; name: string; name_ar?: string; member_only?: boolean };
+type Addon = { id: string; name: string; name_ar?: string; price: number | string; per: "order" | "ticket"; max?: number | string };
 type Refund = { id: string; buyer: string | null; buyer_phone: string | null; total: number; payment_method: string; refund_status: string; refund_requested_at: string; addons: any[] };
 const KINDS: OfferKind[] = ["ticket", "daypass", "item", "stay", "pass", "table"];
 const LKINDS = ["event", "venue", "stay", "pass"];
@@ -40,11 +43,15 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [addons, setAddons] = useState<Addon[]>([]);
+  const [pace, setPace] = useState<TierPace[] | null>(null);
+  const [flash, setFlash] = useState<any[]>([]);
+  const { features } = useConfig();
   const [waits, setWaits] = useState<Record<string, number>>({});
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"basics" | "offers" | "tables" | "deals" | "refunds">("basics");
+  const [tab, setTab] = useState<"basics" | "offers" | "tables" | "deals" | "addons" | "pricing" | "refunds">("basics");
   const file = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -61,6 +68,10 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
     setTiers([...(data.tiers ?? [])].sort((a: Tier, b: Tier) => (a.sort ?? 0) - (b.sort ?? 0)).map((x: any) => ({ ...x, kind: x.kind ?? "ticket" })));
     setTables((data.tables_vip ?? []).map((x: any) => ({ ...x, packages: x.packages ?? [] })));
     setDeals(data.deals ?? []);
+    setAddons(Array.isArray(data.addon_options) ? data.addon_options : []);
+    // pricing assistant: pace per tier (security-definer RPC, organiser-scoped) and the live flash codes
+    sb().rpc("tier_pace", { p_event: params.id }).then(({ data: pr }) => setPace((pr as TierPace[]) ?? []));
+    sb().from("promo_codes").select("code,pct_off,ends_at,uses,max_uses").eq("event_id", params.id).eq("source", "flash").eq("active", true).gt("ends_at", new Date().toISOString()).then(({ data: fc }) => setFlash(fc ?? []));
     const tierIds = (data.tiers ?? []).map((x: any) => x.id);
     if (tierIds.length) {
       const { data: w } = await sb().from("waitlist").select("tier_id").in("tier_id", tierIds).is("notified_at", null);
@@ -77,6 +88,17 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
   const setTable = (i: number, k: keyof Table, v: unknown) => setTables(tables.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
   const setPkg = (i: number, p: number, k: keyof Pkg, v: unknown) => setTable(i, "packages", tables[i].packages.map((x, q) => (q === p ? { ...x, [k]: v } : x)));
   const setDeal = (i: number, k: keyof Deal, v: unknown) => setDeals(deals.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const setAddon = (i: number, k: keyof Addon, v: unknown) => setAddons(addons.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const makeFlash = async (pct: number, hours: number) => {
+    setBusy(true);
+    const { data, error } = await sb().rpc("create_flash_code", { p_event: ev.id, p_pct: pct, p_hours: hours, p_max_uses: 50 });
+    setBusy(false);
+    if (error) return toast(error.message);
+    toast(t("flashMade").replace("{code}", String(data)).replace("{hours}", String(hours)));
+    try { await navigator.clipboard.writeText(String(data)); } catch {}
+    const { data: fc } = await sb().from("promo_codes").select("code,pct_off,ends_at,uses,max_uses").eq("event_id", ev.id).eq("source", "flash").eq("active", true).gt("ends_at", new Date().toISOString());
+    setFlash(fc ?? []);
+  };
   const policyKey = (p: any) => (!p || p.type === "none" ? "none" : p.type === "flexible" ? "flexible" : String(p.hours ?? 24));
   const policyOf = (k: string) => (k === "none" ? { type: "none" } : k === "flexible" ? { type: "flexible" } : { type: "until_hours_before", hours: Number(k) });
 
@@ -107,6 +129,7 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
       category: ev.category, kind: ev.kind, starts_at: fromLocal(ev.starts_at), doors_at: fromLocal(ev.doors_at), ends_at: fromLocal(ev.ends_at), status: ev.status,
       pinned: ev.pinned || null, pinned_ar: ev.pinned_ar || null, credit: ev.credit || null, refund_policy: ev.refund_policy ?? { type: "until_hours_before", hours: 24 }, seated: !!ev.seated,
       deals: deals.filter((d) => d.name?.trim()).map((d) => ({ ...d, id: d.id || rid() })), venue_id: venueId || null,
+      addon_options: addons.filter((a) => a.name?.trim()).map((a) => ({ id: a.id || rid(), name: a.name.trim(), name_ar: a.name_ar || null, price: Math.max(0, +a.price || 0), per: a.per === "ticket" ? "ticket" : "order", max: Math.max(1, +(a.max ?? 4) || 4) })),
     }).eq("id", ev.id);
     if (error) { setBusy(false); return setErr(error.message); }
     for (const [i, x] of tiers.entries()) {
@@ -178,7 +201,7 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
         </div>
 
         <div className="chips" style={{ overflowX: "auto" }}>
-          {(["basics", "offers", "tables", "deals", "refunds"] as const).map((k) => (
+          {(["basics", "offers", "tables", "deals", "addons", "pricing", "refunds"] as const).filter((k) => (k !== "addons" || features.addons) && (k !== "pricing" || features.insights)).map((k) => (
             <button key={k} className={`chip ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{t(`tab_${k}`)}{k === "refunds" && pending ? ` · ${pending}` : ""}</button>
           ))}
         </div>
@@ -190,43 +213,43 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
               <div style={{ position: "absolute", insetInlineEnd: 10, bottom: 10 }} className="btn sm line">{ev.cover_url ? t("changeCover") : t("addCover")}</div>
             </div>
             <div className="card pad stack">
-              <div className="field"><label>{t("evName")}</label><input value={ev.title ?? ""} onChange={(e) => set("title", e.target.value)} /></div>
-              <div className="field"><label>{t("evNameAr")}</label><input dir="rtl" value={ev.title_ar ?? ""} onChange={(e) => set("title_ar", e.target.value)} /></div>
+              <label className="field"><span className="lbl">{t("evName")}</span><input value={ev.title ?? ""} onChange={(e) => set("title", e.target.value)} /></label>
+              <label className="field"><span className="lbl">{t("evNameAr")}</span><input dir="rtl" value={ev.title_ar ?? ""} onChange={(e) => set("title_ar", e.target.value)} /></label>
               <div className="grid2">
-                <div className="field"><label>{t("listingKind")}</label><select value={ev.kind ?? "event"} onChange={(e) => set("kind", e.target.value)}>{LKINDS.map((k) => <option key={k} value={k}>{t(k === "event" ? "events" : k)}</option>)}</select></div>
-                <div className="field"><label>{t("category")}</label><select value={ev.category} onChange={(e) => set("category", e.target.value)}>{[...new Set([...LISTING_CATEGORIES, ev.category])].map((c) => <option key={c}>{c}</option>)}</select></div>
+                <label className="field"><span className="lbl">{t("listingKind")}</span><select value={ev.kind ?? "event"} onChange={(e) => set("kind", e.target.value)}>{LKINDS.map((k) => <option key={k} value={k}>{t(k === "event" ? "events" : k)}</option>)}</select></label>
+                <label className="field"><span className="lbl">{t("category")}</span><select value={ev.category} onChange={(e) => set("category", e.target.value)}>{[...new Set([...LISTING_CATEGORIES, ev.category])].map((c) => <option key={c}>{c}</option>)}</select></label>
               </div>
               <div className="grid2">
-                <div className="field"><label>{t("dateTime")}</label><input type="datetime-local" value={toLocal(ev.starts_at)} onChange={(e) => set("starts_at", e.target.value)} /></div>
-                <div className="field"><label>{t("doors")}</label><input type="datetime-local" value={toLocal(ev.doors_at)} onChange={(e) => set("doors_at", e.target.value)} /></div>
+                <label className="field"><span className="lbl">{t("dateTime")}</span><input type="datetime-local" value={toLocal(ev.starts_at)} onChange={(e) => set("starts_at", e.target.value)} /></label>
+                <label className="field"><span className="lbl">{t("doors")}</span><input type="datetime-local" value={toLocal(ev.doors_at)} onChange={(e) => set("doors_at", e.target.value)} /></label>
               </div>
-              {ev.kind !== "event" && <div className="field"><label>{t("openUntil")}</label><input type="datetime-local" value={toLocal(ev.ends_at)} onChange={(e) => set("ends_at", e.target.value)} /></div>}
-              <div className="field"><label>{t("desc")}</label><textarea value={ev.description ?? ""} onChange={(e) => set("description", e.target.value)} /></div>
-              <div className="field"><label>{t("descAr")}</label><textarea dir="rtl" value={ev.description_ar ?? ""} onChange={(e) => set("description_ar", e.target.value)} /></div>
-              <div className="field"><label>{t("pinnedLine")}</label><input value={ev.pinned ?? ""} onChange={(e) => set("pinned", e.target.value)} placeholder={t("pinnedPh")} /></div>
-              <div className="field"><label>{t("pinnedLineAr")}</label><input dir="rtl" value={ev.pinned_ar ?? ""} onChange={(e) => set("pinned_ar", e.target.value)} /></div>
+              {ev.kind !== "event" && <label className="field"><span className="lbl">{t("openUntil")}</span><input type="datetime-local" value={toLocal(ev.ends_at)} onChange={(e) => set("ends_at", e.target.value)} /></label>}
+              <label className="field"><span className="lbl">{t("desc")}</span><textarea value={ev.description ?? ""} onChange={(e) => set("description", e.target.value)} /></label>
+              <label className="field"><span className="lbl">{t("descAr")}</span><textarea dir="rtl" value={ev.description_ar ?? ""} onChange={(e) => set("description_ar", e.target.value)} /></label>
+              <label className="field"><span className="lbl">{t("pinnedLine")}</span><input value={ev.pinned ?? ""} onChange={(e) => set("pinned", e.target.value)} placeholder={t("pinnedPh")} /></label>
+              <label className="field"><span className="lbl">{t("pinnedLineAr")}</span><input dir="rtl" value={ev.pinned_ar ?? ""} onChange={(e) => set("pinned_ar", e.target.value)} /></label>
               <div className="grid2">
-                <div className="field"><label>{t("refundPolicy")}</label><select value={policyKey(ev.refund_policy)} onChange={(e) => set("refund_policy", policyOf(e.target.value))}>{POLICIES.map(([v, k]) => <option key={v} value={v}>{t(k)}</option>)}</select></div>
-                <div className="field"><label>{t("photoCredit")}</label><input value={ev.credit ?? ""} onChange={(e) => set("credit", e.target.value)} placeholder="@marc.k" /></div>
+                <label className="field"><span className="lbl">{t("refundPolicy")}</span><select value={policyKey(ev.refund_policy)} onChange={(e) => set("refund_policy", policyOf(e.target.value))}>{POLICIES.map(([v, k]) => <option key={v} value={v}>{t(k)}</option>)}</select></label>
+                <label className="field"><span className="lbl">{t("photoCredit")}</span><input value={ev.credit ?? ""} onChange={(e) => set("credit", e.target.value)} placeholder="@marc.k" /></label>
               </div>
             </div>
             <div className="card pad stack">
               <div className="eyebrow">{t("venue")}</div>
-              <div className="field"><select value={venue?.id ?? ""} onChange={(e) => { const v = venues.find((x) => x.id === e.target.value); if (v) sb().from("venues").select("*").eq("id", v.id).single().then(({ data }) => { setVenue(data); set("venue_id", v.id); }); else setVenue({ name: "", city: "Beirut" }); }}>
+              <div className="field"><select aria-label={t("venue")} value={venue?.id ?? ""} onChange={(e) => { const v = venues.find((x) => x.id === e.target.value); if (v) sb().from("venues").select("*").eq("id", v.id).single().then(({ data }) => { setVenue(data); set("venue_id", v.id); }); else setVenue({ name: "", city: "Beirut" }); }}>
                 <option value="">— {t("newVenue")} —</option>{venues.map((v) => <option key={v.id} value={v.id}>{v.name}, {v.city}</option>)}</select></div>
               <div className="grid2">
-                <div className="field"><label>{t("fName")}</label><input value={venue?.name ?? ""} onChange={(e) => setV("name", e.target.value)} /></div>
-                <div className="field"><label>{t("fNameAr")}</label><input dir="rtl" value={venue?.name_ar ?? ""} onChange={(e) => setV("name_ar", e.target.value)} /></div>
+                <label className="field"><span className="lbl">{t("fName")}</span><input value={venue?.name ?? ""} onChange={(e) => setV("name", e.target.value)} /></label>
+                <label className="field"><span className="lbl">{t("fNameAr")}</span><input dir="rtl" value={venue?.name_ar ?? ""} onChange={(e) => setV("name_ar", e.target.value)} /></label>
               </div>
               <div className="grid2">
-                <div className="field"><label>{t("city")}</label><input value={venue?.city ?? ""} onChange={(e) => setV("city", e.target.value)} /></div>
-                <div className="field"><label>{t("cityAr")}</label><input dir="rtl" value={venue?.city_ar ?? ""} onChange={(e) => setV("city_ar", e.target.value)} /></div>
+                <label className="field"><span className="lbl">{t("city")}</span><input value={venue?.city ?? ""} onChange={(e) => setV("city", e.target.value)} /></label>
+                <label className="field"><span className="lbl">{t("cityAr")}</span><input dir="rtl" value={venue?.city_ar ?? ""} onChange={(e) => setV("city_ar", e.target.value)} /></label>
               </div>
-              <div className="field"><label>{t("address")}</label><input value={venue?.address ?? ""} onChange={(e) => setV("address", e.target.value)} /></div>
-              <div className="field"><label>{t("addressAr")}</label><input dir="rtl" value={venue?.address_ar ?? ""} onChange={(e) => setV("address_ar", e.target.value)} /></div>
+              <label className="field"><span className="lbl">{t("address")}</span><input value={venue?.address ?? ""} onChange={(e) => setV("address", e.target.value)} /></label>
+              <label className="field"><span className="lbl">{t("addressAr")}</span><input dir="rtl" value={venue?.address_ar ?? ""} onChange={(e) => setV("address_ar", e.target.value)} /></label>
               <div className="grid2">
-                <div className="field"><label>Lat</label><input inputMode="decimal" value={venue?.lat ?? ""} onChange={(e) => setV("lat", e.target.value)} placeholder="33.89" /></div>
-                <div className="field"><label>Lng</label><input inputMode="decimal" value={venue?.lng ?? ""} onChange={(e) => setV("lng", e.target.value)} placeholder="35.50" /></div>
+                <label className="field"><span className="lbl">Lat</span><input inputMode="decimal" value={venue?.lat ?? ""} onChange={(e) => setV("lat", e.target.value)} placeholder="33.89" /></label>
+                <label className="field"><span className="lbl">Lng</span><input inputMode="decimal" value={venue?.lng ?? ""} onChange={(e) => setV("lng", e.target.value)} placeholder="35.50" /></label>
               </div>
             </div>
           </>
@@ -237,24 +260,24 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
             {tiers.map((x, i) => x._del ? null : (
               <div key={x.id ?? i} className="card pad stack">
                 <div className="row between">
-                  <select value={x.kind} onChange={(e) => setTier(i, "kind", e.target.value)} style={{ width: "auto" }}>{KINDS.filter((k) => k !== "table").map((k) => <option key={k} value={k} disabled={k === "pass" && !hasPlan(org?.plan, "venue")}>{t(k)}{k === "pass" && !hasPlan(org?.plan, "venue") ? " · Venue" : ""}</option>)}</select>
+                  <select aria-label={t("tab_offers")} value={x.kind} onChange={(e) => setTier(i, "kind", e.target.value)} style={{ width: "auto" }}>{KINDS.filter((k) => k !== "table").map((k) => <option key={k} value={k} disabled={k === "pass" && !hasPlan(org?.plan, "venue")}>{t(k)}{k === "pass" && !hasPlan(org?.plan, "venue") ? " · Venue" : ""}</option>)}</select>
                   <span className="note num">{x.sold ?? 0} {t("soldLabel")}{waits[x.id ?? ""] ? ` · ${waits[x.id!]} ${t("waiting")}` : ""}</span>
                 </div>
                 <div className="grid2">
-                  <div className="field"><label>{t("tierName")}</label><input value={x.name ?? ""} onChange={(e) => setTier(i, "name", e.target.value)} /></div>
-                  <div className="field"><label>{t("fNameAr")}</label><input dir="rtl" value={x.name_ar ?? ""} onChange={(e) => setTier(i, "name_ar", e.target.value)} /></div>
+                  <label className="field"><span className="lbl">{t("tierName")}</span><input value={x.name ?? ""} onChange={(e) => setTier(i, "name", e.target.value)} /></label>
+                  <label className="field"><span className="lbl">{t("fNameAr")}</span><input dir="rtl" value={x.name_ar ?? ""} onChange={(e) => setTier(i, "name_ar", e.target.value)} /></label>
                 </div>
                 <div className="grid3">
-                  <div className="field"><label>{x.kind === "pass" ? `${t("price")} ${t("perMonth")}` : t("price")}</label><input inputMode="decimal" value={x.face_price} onChange={(e) => setTier(i, "face_price", e.target.value)} /></div>
-                  <div className="field"><label>{t("fCap")} · {unit(x.kind)}</label><input inputMode="numeric" value={x.capacity} onChange={(e) => setTier(i, "capacity", e.target.value)} /></div>
-                  <div className="field"><label>{t("fMax")}</label><input inputMode="numeric" value={x.per_order_limit ?? 6} onChange={(e) => setTier(i, "per_order_limit", e.target.value)} /></div>
+                  <label className="field"><span className="lbl">{x.kind === "pass" ? `${t("price")} ${t("perMonth")}` : t("price")}</span><input inputMode="decimal" value={x.face_price} onChange={(e) => setTier(i, "face_price", e.target.value)} /></label>
+                  <label className="field"><span className="lbl">{t("fCap")} · {unit(x.kind)}</span><input inputMode="numeric" value={x.capacity} onChange={(e) => setTier(i, "capacity", e.target.value)} /></label>
+                  <label className="field"><span className="lbl">{t("fMax")}</span><input inputMode="numeric" value={x.per_order_limit ?? 6} onChange={(e) => setTier(i, "per_order_limit", e.target.value)} /></label>
                 </div>
                 <div className="grid2">
-                  <div className="field"><label>{t("saleStarts")}</label><input type="datetime-local" value={toLocal(x.sale_starts ?? null)} onChange={(e) => setTier(i, "sale_starts", e.target.value)} /></div>
-                  <div className="field"><label>{t("saleEnds")}</label><input type="datetime-local" value={toLocal(x.sale_ends ?? null)} onChange={(e) => setTier(i, "sale_ends", e.target.value)} /></div>
+                  <label className="field"><span className="lbl">{t("saleStarts")}</span><input type="datetime-local" value={toLocal(x.sale_starts ?? null)} onChange={(e) => setTier(i, "sale_starts", e.target.value)} /></label>
+                  <label className="field"><span className="lbl">{t("saleEnds")}</span><input type="datetime-local" value={toLocal(x.sale_ends ?? null)} onChange={(e) => setTier(i, "sale_ends", e.target.value)} /></label>
                 </div>
-                {x.kind === "pass" && <div className="field"><label>{t("planMonths")}</label><input inputMode="numeric" value={x.plan_months ?? 1} onChange={(e) => setTier(i, "plan_months", e.target.value)} /></div>}
-                <div className="field"><label>{t("tierNote")}</label><input value={x.note ?? ""} onChange={(e) => setTier(i, "note", e.target.value)} placeholder={t("tierNotePh")} /></div>
+                {x.kind === "pass" && <label className="field"><span className="lbl">{t("planMonths")}</span><input inputMode="numeric" value={x.plan_months ?? 1} onChange={(e) => setTier(i, "plan_months", e.target.value)} /></label>}
+                <label className="field"><span className="lbl">{t("tierNote")}</span><input value={x.note ?? ""} onChange={(e) => setTier(i, "note", e.target.value)} placeholder={t("tierNotePh")} /></label>
                 <label className="row" style={{ justifyContent: "flex-start", gap: 8, fontSize: 13 }}><input type="checkbox" checked={!!x.member_free} onChange={(e) => setTier(i, "member_free", e.target.checked)} /> {t("membersFree")}</label>
                 <div className="note num">{+x.face_price > 0 ? `${t("buyerSees")} ${money(allInKind(x.kind, +x.face_price))} ${x.kind === "stay" ? t("perNight") : x.kind === "pass" ? t("perMonth") : t("allIn")}` : t("free")}</div>
                 <div className="row" style={{ gap: 8 }}>
@@ -273,13 +296,13 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
             {tables.map((x, i) => x._del ? null : (
               <div key={x.id ?? i} className="card pad stack">
                 <div className="grid2">
-                  <div className="field"><label>{t("tableName")}</label><input value={x.name ?? ""} onChange={(e) => setTable(i, "name", e.target.value)} /></div>
-                  <div className="field"><label>{t("fNameAr")}</label><input dir="rtl" value={x.name_ar ?? ""} onChange={(e) => setTable(i, "name_ar", e.target.value)} /></div>
+                  <label className="field"><span className="lbl">{t("tableName")}</span><input value={x.name ?? ""} onChange={(e) => setTable(i, "name", e.target.value)} /></label>
+                  <label className="field"><span className="lbl">{t("fNameAr")}</span><input dir="rtl" value={x.name_ar ?? ""} onChange={(e) => setTable(i, "name_ar", e.target.value)} /></label>
                 </div>
                 <div className="grid3">
-                  <div className="field"><label>{t("seats")}</label><input inputMode="numeric" value={x.seats} onChange={(e) => setTable(i, "seats", e.target.value)} /></div>
-                  <div className="field"><label>{t("minSpend")} $</label><input inputMode="decimal" value={x.min_spend} onChange={(e) => setTable(i, "min_spend", e.target.value)} /></div>
-                  <div className="field"><label>{t("deposit")} $</label><input inputMode="decimal" value={x.deposit} onChange={(e) => setTable(i, "deposit", e.target.value)} /></div>
+                  <label className="field"><span className="lbl">{t("seats")}</span><input inputMode="numeric" value={x.seats} onChange={(e) => setTable(i, "seats", e.target.value)} /></label>
+                  <label className="field"><span className="lbl">{t("minSpend")} $</span><input inputMode="decimal" value={x.min_spend} onChange={(e) => setTable(i, "min_spend", e.target.value)} /></label>
+                  <label className="field"><span className="lbl">{t("deposit")} $</span><input inputMode="decimal" value={x.deposit} onChange={(e) => setTable(i, "deposit", e.target.value)} /></label>
                 </div>
                 <div className="eyebrow">{t("packages")}</div>
                 {(x.packages ?? []).map((p, q) => (
@@ -304,8 +327,8 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
             <div className="small">{t("dealsNote")}</div>
             {deals.map((d, i) => (
               <div key={d.id} className="card pad stack">
-                <div className="field"><label>{t("deal")}</label><input value={d.name} onChange={(e) => setDeal(i, "name", e.target.value)} placeholder="Bring a friend free this Friday" /></div>
-                <div className="field"><label>{t("fNameAr")}</label><input dir="rtl" value={d.name_ar ?? ""} onChange={(e) => setDeal(i, "name_ar", e.target.value)} /></div>
+                <label className="field"><span className="lbl">{t("deal")}</span><input value={d.name} onChange={(e) => setDeal(i, "name", e.target.value)} placeholder="Bring a friend free this Friday" /></label>
+                <label className="field"><span className="lbl">{t("fNameAr")}</span><input dir="rtl" value={d.name_ar ?? ""} onChange={(e) => setDeal(i, "name_ar", e.target.value)} /></label>
                 <div className="row between">
                   <label className="row" style={{ gap: 8, fontSize: 13 }}><input type="checkbox" checked={!!d.member_only} onChange={(e) => setDeal(i, "member_only", e.target.checked)} /> {t("memberPrice")}</label>
                   <button className="btn xs line" style={{ color: "var(--red-dark)" }} onClick={() => setDeals(deals.filter((_, j) => j !== i))}>{t("remove")}</button>
@@ -313,6 +336,73 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
               </div>
             ))}
             <button className="btn line" onClick={() => setDeals([...deals, { id: rid(), name: "", name_ar: "" }])}>{t("addDeal")}</button>
+          </div>
+        )}
+
+        {tab === "addons" && (
+          <div className="stack">
+            <div className="small">{t("addonsNote")}</div>
+            {addons.map((a, i) => (
+              <div key={a.id} className="card pad stack">
+                <div className="grid2">
+                  <label className="field"><span className="lbl">{t("addonName")}</span><input value={a.name} onChange={(e) => setAddon(i, "name", e.target.value)} placeholder={t("fastLane")} /></label>
+                  <label className="field"><span className="lbl">{t("fNameAr")}</span><input dir="rtl" value={a.name_ar ?? ""} onChange={(e) => setAddon(i, "name_ar", e.target.value)} /></label>
+                </div>
+                <div className="grid2">
+                  <label className="field"><span className="lbl">{t("price")}</span><input inputMode="decimal" value={a.price} onChange={(e) => setAddon(i, "price", e.target.value)} /></label>
+                  <label className="field"><span className="lbl">{t("addonMax")}</span><input inputMode="numeric" value={a.max ?? 4} onChange={(e) => setAddon(i, "max", e.target.value)} /></label>
+                </div>
+                <div className="row between">
+                  <div className="seg" style={{ maxWidth: 220 }}>
+                    <button className={a.per === "order" ? "on" : ""} onClick={() => setAddon(i, "per", "order")}>{t("addonPer")} {t("perOrder")}</button>
+                    <button className={a.per === "ticket" ? "on" : ""} onClick={() => setAddon(i, "per", "ticket")}>{t("addonPer")} {t("perTicket2")}</button>
+                  </div>
+                  <button className="btn xs line" style={{ color: "var(--red-dark)" }} onClick={() => setAddons(addons.filter((_, j) => j !== i))}>{t("remove")}</button>
+                </div>
+              </div>
+            ))}
+            <div className="grid2">
+              <button className="btn line" onClick={() => setAddons([...addons, { id: rid(), name: t("fastLane"), price: 10, per: "ticket", max: 6 }])}>⚡ {t("fastLane")}</button>
+              <button className="btn line" onClick={() => setAddons([...addons, { id: rid(), name: t("parking"), price: 5, per: "order", max: 2 }])}>🅿️ {t("parking")}</button>
+            </div>
+            <button className="btn line" onClick={() => setAddons([...addons, { id: rid(), name: "", price: 5, per: "order", max: 4 }])}>{t("addAddon")}</button>
+          </div>
+        )}
+
+        {tab === "pricing" && (
+          <div className="stack">
+            <div className="small">{t("pricingSub")}</div>
+            {pace === null && <div className="empty">{t("loading")}</div>}
+            {pace && !pace.length && <div className="empty">{t("noPace")}</div>}
+            {(pace ?? []).map((r) => {
+              const a = tierAdvice(r);
+              const tone = a.state === "slow" ? "var(--amber)" : a.state === "hot" ? "var(--g1)" : "var(--ink2)";
+              const label = t(a.state === "slow" ? "paceSlow" : a.state === "hot" ? "paceHot" : a.state === "soldout" ? "paceSoldOut" : a.state === "past" ? "pacePast" : "paceTrack");
+              const body = a.state === "slow" ? t("paceSlowB").replace("{pct}", String(a.pct)) : a.state === "hot" ? t("paceHotB").replace("{pct}", String(a.raise)) : a.state === "track" ? t("paceTrackB") : "";
+              return (
+                <div key={r.tier_id} className="card pad">
+                  <div className="row between">
+                    <div><div className="title" style={{ fontSize: 15 }}>{r.name} · {money(Number(r.face_price))}</div><div className="meta">{Number(r.sold) + Number(r.held)}/{r.capacity} {t("paceSold")} · {r.sold_7d} {t("paceWeek")} · {r.sold_1d} {t("paceDay")}</div></div>
+                    <span className="tag" style={{ background: tone, color: "#fff" }}>{label}</span>
+                  </div>
+                  {a.state !== "past" && a.state !== "soldout" && (
+                    <div className="meter" style={{ marginTop: 8 }}>
+                      <span>{a.pct}% {t("paceProjected")} · {a.daysLeft} {t("paceDaysLeft")}</span>
+                      <div className="bar"><b style={{ width: `${Math.min(100, a.pct)}%`, background: tone }} /></div>
+                    </div>
+                  )}
+                  {body && <p className="small" style={{ margin: "8px 0 0" }}>{body}</p>}
+                  {a.flash && <button className="btn sm red" style={{ marginTop: 8 }} disabled={busy} onClick={() => makeFlash(a.flash!.pct, a.flash!.hours)}>⚡ {t("flashBtn").replace("{pct}", String(a.flash.pct)).replace("{hours}", String(a.flash.hours))}</button>}
+                </div>
+              );
+            })}
+            {flash.length > 0 && (
+              <div className="card pad">
+                <div className="eyebrow">{t("flashActive")}</div>
+                {flash.map((f) => <div key={f.code} className="row between" style={{ padding: "6px 0", borderTop: "1px solid var(--line)" }}><b className="num">{f.code}</b><span className="small">−{f.pct_off}% · {f.uses}/{f.max_uses} · {new Date(f.ends_at).toLocaleString(lang === "ar" ? "ar-LB" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span></div>)}
+                <Link href="/org/codes" className="small" style={{ color: "var(--g1)", fontWeight: 600, display: "inline-block", marginTop: 8 }}>{t("promoCodes")} →</Link>
+              </div>
+            )}
           </div>
         )}
 

@@ -9,7 +9,7 @@
 
 Pushes to `main` on `willytheboy/whatsup-ticketing` deploy both projects.
 
-The older manually-deployed projects `whatsup-ticketing` (prj_IhThFJSqR8Ny1r2CFlZCSnrL6fn8) and `whatsup-backoffice` (prj_oVIlFrwPCwvHGgBAMQiiDHNNT2UO) are not git-linked and still hold the short names (`whatsup-backoffice.vercel.app` currently serves a redirect to the `-app` host); delete them in the Vercel dashboard and rename the `-app` projects to reclaim `whatsup-ticketing.vercel.app` / `whatsup-backoffice.vercel.app` (the hostname check in `src/middleware.ts` already covers both names). `app/vercel.json` pins `framework: nextjs` so a fresh project builds correctly even before Vercel has auto-detected the framework. No environment variables are required for a green build; set them to override the defaults in `app/.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_TENANT`, `NEXT_PUBLIC_APP_ROLE`, `NEXT_PUBLIC_BACKOFFICE_URL`). Add **`ANTHROPIC_API_KEY`** (and optionally `ANTHROPIC_MODEL`) to the ticketing project to switch the concierge, vibe creator and poster-to-listing from catalogue rules to Claude.
+The older manually-deployed projects `whatsup-ticketing` (prj_IhThFJSqR8Ny1r2CFlZCSnrL6fn8) and `whatsup-backoffice` (prj_oVIlFrwPCwvHGgBAMQiiDHNNT2UO) are not git-linked and still hold the short names (`whatsup-backoffice.vercel.app` currently serves a redirect to the `-app` host); delete them in the Vercel dashboard and rename the `-app` projects to reclaim `whatsup-ticketing.vercel.app` / `whatsup-backoffice.vercel.app` (the hostname check in `src/middleware.ts` already covers both names). `app/vercel.json` pins `framework: nextjs` so a fresh project builds correctly even before Vercel has auto-detected the framework. No environment variables are required for a green build; set them to override the defaults in `app/.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_TENANT`, `NEXT_PUBLIC_APP_ROLE`, `NEXT_PUBLIC_BACKOFFICE_URL`, `NEXT_PUBLIC_APP_URL` — the last one is what the back office's "Preview in the app" links open). Add **`ANTHROPIC_API_KEY`** (and optionally `ANTHROPIC_MODEL`) to the ticketing project to switch the concierge, vibe creator and poster-to-listing from catalogue rules to Claude.
 
 ## Supabase
 
@@ -19,6 +19,10 @@ The older manually-deployed projects `whatsup-ticketing` (prj_IhThFJSqR8Ny1r2CFl
 4. Run `supabase/seed/demo.sql` then `supabase/seed/demo_v2.sql` (multi-vertical demo listings, deals, a promoter, venue stations), create the first admin user in Auth, and insert their `super_admin` membership (instructions at the bottom of the seed file).
 
 5. Messaging: `insert into app_settings values ('notify_url','https://<ref>.supabase.co/functions/v1/notify'), ('notify_secret','<same as NOTIFY_SECRET>')` — pg_cron then drains `message_log` every five minutes. Without `WHATSAPP_TOKEN` the queue is rendered and marked `sandbox` (visible in the back office); with it, messages go out through the templates in `docs/WHATSAPP-TEMPLATES.md`.
+
+## Tenant settings (v0.7)
+
+What the client app shows is data, not a deploy: **Back office → Settings** writes `tenants.config` (`theme`, `tabs`, `features`) and `tenants.brand`; the app reads them on every request (`lib/features-server.ts`) and passes them to client components (`components/Config.tsx`). An empty config is v0.6 behaviour. To move the whole configuration to another install, copy those two columns. The rebrand checklist is in `docs/DESIGN.md`.
 
 ## Going live with payments
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import TopBar from "@/components/TopBar";
+import { FeatureOff, useFeature } from "@/components/Config";
 import { useToast } from "@/components/Toast";
 import { sb } from "@/lib/supabase-browser";
 import { money, allInKind, unitFee } from "@/lib/config";
@@ -17,6 +18,7 @@ type Squad = { id: string; name: string; owner_id: string; members: Member[]; it
 /** Squad (brief §5.5): everyone pays their own share. The link goes round on WhatsApp; each friend taps "Pay my share". */
 export default function SquadPage({ params }: { params: { id: string } }) {
   const t = useT();
+  const featureOn = useFeature("squads");
   const lang = useLang();
   const toast = useToast();
   const router = useRouter();
@@ -27,6 +29,7 @@ export default function SquadPage({ params }: { params: { id: string } }) {
   useEffect(() => { sb().auth.getUser().then(async ({ data }) => { setUser(data.user); if (data.user) { const { data: p } = await sb().from("profiles").select("name").eq("id", data.user.id).maybeSingle(); setName(p?.name ?? ""); } }); load(); }, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const me = sq?.members.find((m) => m.user_id === user?.id);
+  if (!featureOn) return <FeatureOff back="/wallet" />;
   const item = sq?.items[0];
   const share = item ? allInKind(item.kind as any, item.face) : 0;
   const link = typeof location !== "undefined" ? `${location.origin}/squad/${params.id}` : "";

@@ -7,8 +7,9 @@ import { sb } from "@/lib/supabase-browser";
 import { useToast } from "@/components/Toast";
 import { allInKind, unitFee, money, lbp, type OfferKind } from "@/lib/config";
 import { useLang, useT, useCur } from "@/lib/lang";
-import { left as leftOf, type Tier, type Table, type Deal } from "@/lib/catalogue";
+import { left as leftOf, type Tier, type Table, type Deal, type AddonOption } from "@/lib/catalogue";
 import CalendarSheet from "@/components/CalendarSheet";
+import { useConfig } from "@/components/Config";
 
 export type CartLine = { tier_id: string; name: string; kind: OfferKind; qty: number; face: number; unit: number; fee: number; covered: boolean; note: string | null; plan_months: number | null };
 export type Cart = {
@@ -19,15 +20,22 @@ export type Cart = {
   method: "card" | "cash_door" | null;
   checkin: string | null;
   squad_id?: string | null;
+  addons?: CartAddon[];
 };
+export type CartAddon = { id: string; name: string; qty: number; unit: number; per: "order" | "ticket" };
 const SLOTS = ["19:00", "19:30", "20:00", "20:30", "21:00", "21:30", "22:00"];
 const nextFriday = () => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7)); return d.toISOString().slice(0, 10); };
 
 /** Offer pickers by type (brief §5.4). Pickers change shape by type; nothing else does. The cart lives in sessionStorage until checkout. */
-export default function OfferPicker({ listing, tiers, tables, deals }: { listing: Cart["listing"] & { status: string; organiser: string; organiserWa?: string | null }; tiers: Tier[]; tables: Table[]; deals: Deal[] }) {
+export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: dealsIn, addons: addonsIn = [] }: { listing: Cart["listing"] & { status: string; organiser: string; organiserWa?: string | null }; tiers: Tier[]; tables: Table[]; deals: Deal[]; addons?: AddonOption[] }) {
   const t = useT();
   const lang = useLang();
-  const cur = useCur();
+  const { features } = useConfig();
+  const cur0 = useCur();
+  const cur = features.currency_lbp ? cur0 : "USD";
+  // the back office decides which offers a tenant sells (tenants.config.features)
+  const tables = features.tables ? tablesIn : [];
+  const deals = features.deals ? dealsIn : [];
   const toast = useToast();
   const router = useRouter();
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -40,6 +48,7 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
   const [checkin, setCheckin] = useState(nextFriday());
   const [cal, setCal] = useState(false);
   const [gift, setGift] = useState<{ on: boolean; name: string; phone: string }>({ on: false, name: "", phone: "" });
+  const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [user, setUser] = useState<User | null>(null);
   const [hasPass, setHasPass] = useState(false);
   const [notify, setNotify] = useState<Record<string, boolean>>({});
@@ -88,10 +97,14 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
 
   const count = lines.reduce((a, l) => a + (l.kind === "stay" ? 1 : l.qty), 0);
   const pkgRow = table && pkg ? (table.packages ?? []).find((p) => p.id === pkg) ?? null : null;
-  const total = lines.reduce((a, l) => a + (l.unit + l.fee) * l.qty, 0) + (table ? Number(table.deposit) + Number(pkgRow?.price ?? 0) : 0);
+  // add-ons (fast lane, parking…): per-ticket ones follow the ticket count, per-order ones are a quantity the buyer picks
+  const ticketCount = lines.filter((l) => ["ticket", "daypass", "item"].includes(l.kind)).reduce((a, l) => a + l.qty, 0);
+  const cartAddons: CartAddon[] = addonsIn.filter((a) => (addonQty[a.id] ?? 0) > 0).map((a) => ({ id: a.id, name: lang === "ar" && a.name_ar ? a.name_ar : a.name, qty: a.per === "ticket" ? Math.min(ticketCount, addonQty[a.id] ?? 0) : addonQty[a.id] ?? 0, unit: Number(a.price), per: a.per })).filter((a) => a.qty > 0);
+  const addonTotal = cartAddons.reduce((a, x) => a + x.qty * x.unit, 0);
+  const total = lines.reduce((a, l) => a + (l.unit + l.fee) * l.qty, 0) + (table ? Number(table.deposit) + Number(pkgRow?.price ?? 0) : 0) + addonTotal;
   const tableReady = !!table && (!table.seats || !!party) && !!time;
   const canBook = lines.length > 0 || tableReady;
-  const giftable = lines.some((l) => ["ticket", "daypass", "item"].includes(l.kind));
+  const giftable = features.gifts && lines.some((l) => ["ticket", "daypass", "item"].includes(l.kind));
 
   const bump = (x: Tier, d: number) => {
     const max = Math.min(x.per_order_limit || 6, leftOf(x));
@@ -117,6 +130,7 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
       listing: { id: listing.id, slug: listing.slug, title: listing.title, kind: listing.kind },
       lines, table: table ? { id: table.id, name: name(table), deposit: Number(table.deposit), party, time, package: pkgRow ? { id: pkgRow.id, name: name(pkgRow as any), price: Number(pkgRow.price) } : null } : null,
       gift: gift.on && gift.name ? { name: gift.name, phone: gift.phone } : null, method, checkin: lines.some((l) => l.kind === "stay") ? checkin : null,
+      addons: cartAddons,
     };
     sessionStorage.setItem("wu-cart", JSON.stringify(cart));
     router.push("/checkout");
@@ -252,6 +266,22 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
         </div>
       ))}
 
+      {addonsIn.length > 0 && (lines.length > 0 || table) && (
+        <div className="offer" style={{ background: "var(--sand)", borderColor: "var(--sand)" }}>
+          <div className="title" style={{ fontSize: 14, marginBottom: 4 }}>⚡ {t("addonsPick")}</div>
+          {addonsIn.map((a) => {
+            const max = a.per === "ticket" ? Math.max(0, ticketCount) : Math.max(1, Number(a.max ?? 4));
+            const q = Math.min(addonQty[a.id] ?? 0, max);
+            return (
+              <div key={a.id} className="row" style={{ padding: "6px 0" }}>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{lang === "ar" && a.name_ar ? a.name_ar : a.name}</div><div className="meta">{money(Number(a.price))} · {a.per === "ticket" ? t("perTicket2") : t("perOrder")}</div></div>
+                <div className="qty"><button aria-label="−" onClick={() => setAddonQty((s) => ({ ...s, [a.id]: Math.max(0, q - 1) }))}>−</button><span className="num">{q}</span><button aria-label="+" disabled={q >= max} onClick={() => setAddonQty((s) => ({ ...s, [a.id]: Math.min(max, q + 1) }))}>+</button></div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {giftable && (
         <div className="gift">
           <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14, fontWeight: 600 }}>
@@ -277,7 +307,7 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
               <>
                 <button className="btn red" onClick={() => checkout("card")}>{t("payCard")}</button>
                 <button className="btn line" onClick={() => checkout("cash_door")}>{t("payCash")}</button>
-                {count > 1 && <button className="btn line" style={{ gridColumn: "span 2" }} onClick={split}>👥 {t("splitPay")} · {count}</button>}
+                {features.squads && count > 1 && <button className="btn line" style={{ gridColumn: "span 2" }} onClick={split}>👥 {t("splitPay")} · {count}</button>}
               </>
             ) : (
               <button className="btn red" style={{ gridColumn: "span 2" }} onClick={() => checkout("card")}>{table ? t("confirm") : t("reserve")}</button>

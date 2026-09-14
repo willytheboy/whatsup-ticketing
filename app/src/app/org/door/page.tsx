@@ -9,7 +9,7 @@ import { useT } from "@/lib/lang";
 import { saveManifest, loadManifest, enqueue, readQueue, clearQueue, offlineCheck, type Manifest } from "@/lib/door";
 
 type Ev = { event_id: string; title: string; sold: number; checked_in: number };
-type Scan = { result: string; code?: string; reason?: string; tier?: string; holder?: string; seat?: string | null; at?: string; kind?: string; repeat?: boolean; order_id?: string; deposit?: number | null; party?: number | null; attempts?: number; offline?: boolean; rotating?: boolean };
+type Scan = { result: string; code?: string; reason?: string; tier?: string; holder?: string; seat?: string | null; at?: string; kind?: string; repeat?: boolean; order_id?: string; deposit?: number | null; party?: number | null; attempts?: number; offline?: boolean; rotating?: boolean; locked?: boolean; addons?: { id: string; name: string; qty: number }[] };
 
 /** Door check-in (brief §5.12): camera QR via BarcodeDetector, jsQR fallback for iOS Safari, paste, name lookup.
     Works offline from a cached manifest; scans made offline queue and sync when the connection returns. */
@@ -26,6 +26,13 @@ export default function DoorScanner() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [recent, setRecent] = useState<Scan[]>([]);
   const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [locks, setLocks] = useState<any[]>([]);
+  const loadLocks = async (evId: string) => {
+    if (!evId) return setLocks([]);
+    const { data } = await sb().from("ticket_locks").select("ticket_id,reason,locked_at,tickets!inner(code,event_id,holder_id)").is("released_at", null).eq("tickets.event_id", evId);
+    setLocks(data ?? []);
+  };
+  const release = async (ticketId: string) => { const { error } = await sb().rpc("release_ticket_lock", { p_ticket: ticketId }); if (error) return toast(error.message); toast(t("release")); loadLocks(eventId); };
   const [online, setOnline] = useState(true);
   const [queued, setQueued] = useState(0);
   const [dupes, setDupes] = useState(0);
@@ -74,6 +81,7 @@ export default function DoorScanner() {
     setResult(r);
     setRecent((s) => [{ ...r, at: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) }, ...s].slice(0, 30));
     if (r.result === "duplicate") setDupes((n) => n + 1);
+    if (r.locked || r.result === "locked") loadLocks(eventId);
     if (navigator.vibrate) navigator.vibrate(r.result === "valid" ? 80 : [60, 40, 60]);
     setTimeout(() => { setResult(null); busy.current = false; }, r.result === "reserved" ? 6000 : 2200);
   };
@@ -149,6 +157,7 @@ export default function DoorScanner() {
   };
 
   const tone = result ? (result.result === "valid" ? "ok" : result.result === "duplicate" ? "dup" : "bad") : "";
+  useEffect(() => { loadLocks(eventId); }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
   const ev = events.find((e) => e.event_id === eventId);
   const scannedNow = manifest ? manifest.tickets.filter((x) => x.state === "scanned").length : ev?.checked_in ?? 0;
   const soldNow = manifest ? manifest.tickets.filter((x) => x.state !== "reserved").length : ev?.sold ?? 0;
@@ -186,7 +195,8 @@ export default function DoorScanner() {
             </div>
             {result && (
               <div className={`result ${tone}`} role="status" aria-live="assertive">
-                {t(result.result === "valid" ? "valid" : result.result === "duplicate" ? "dup" : result.result === "reserved" ? "payFirst" : result.result === "expired" ? "expiredK" : "invalid")}
+                {t(result.result === "valid" ? "valid" : result.result === "duplicate" ? "dup" : result.result === "reserved" ? "payFirst" : result.result === "expired" ? "expiredK" : result.result === "locked" ? "locked" : "invalid")}
+                {result.addons?.length ? result.addons.map((a) => <span key={a.id} className="tag" style={{ marginInlineStart: 8, background: "#fff", color: "#000", verticalAlign: "middle" }}>⚡ {a.name}{a.qty > 1 ? ` ×${a.qty}` : ""}</span>) : null}
                 {result.kind ? ` · ${t(result.kind)}` : ""}{result.repeat ? ` · ${t("member")}` : ""}{result.offline ? ` · ${t("offlineK")}` : ""}
                 <small>
                   {result.code ?? (result.reason ? t(result.reason === "expired_token" ? "staleQr" : result.reason === "wrong_event" ? "wrongEvent" : "invalid") : "")}
@@ -194,13 +204,22 @@ export default function DoorScanner() {
                   {result.holder ? ` · ${result.holder}` : ""}
                   {result.seat ? ` · ${result.seat}` : ""}
                   {result.deposit ? ` · ${t("deposit")} $${result.deposit}${result.party ? ` · ${result.party} ${t("seats")}` : ""}` : ""}
-                  {result.result === "duplicate" && result.attempts ? ` · ${result.attempts}× ` : ""}
+                  {result.result === "duplicate" && result.attempts ? ` · ${result.attempts}× ` : ""}{result.locked ? ` · ${t("locked")}` : ""}
                 </small>
                 {result.result === "reserved" && result.order_id && <button className="btn sm" style={{ marginTop: 8, background: "#fff", color: "#000" }} onClick={() => collect(result.order_id!)}>{t("markPaid")}</button>}
               </div>
             )}
             {cam === "idle" && <button className="btn green" onClick={startCam}>{t("startCam")}</button>}
             {cam === "unsupported" && <div className="note">{t("noBD")}</div>}
+            {locks.length > 0 && (
+              <div className="card pad" style={{ borderColor: "var(--red)" }}>
+                <div className="eyebrow" style={{ color: "var(--red-dark)" }}>{t("lockedTickets")} · {locks.length}</div>
+                <div className="small" style={{ margin: "4px 0 6px" }}>{t("lockedNote")}</div>
+                {locks.map((l: any) => (
+                  <div key={l.ticket_id} className="orow"><div><b>{l.tickets?.code}</b><small>{l.reason} · {new Date(l.locked_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></div><button className="btn xs line" onClick={() => release(l.ticket_id)}>{t("release")}</button></div>
+                ))}
+              </div>
+            )}
             <div className="row">
               <div className="field" style={{ flex: 1 }}><input value={token} onChange={(e) => setToken(e.target.value)} placeholder={t("pasteToken")} /></div>
               <button className="btn line sm" onClick={() => { check(token.trim()); setToken(""); }}>{t("check")}</button>

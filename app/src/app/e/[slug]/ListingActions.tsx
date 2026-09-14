@@ -5,12 +5,14 @@ import { useToast } from "@/components/Toast";
 import { I } from "@/components/Icons";
 import { sb } from "@/lib/supabase-browser";
 import { useT } from "@/lib/lang";
+import { useFeature } from "@/components/Config";
 
 /** Share and save (heart) in the hero: native share sheet with WhatsApp fallback (carries the promoter code); saved listings feed "For you". */
 export default function ListingActions({ id, slug, title, line }: { id: string; slug: string; title: string; line: string }) {
   const toast = useToast();
   const router = useRouter();
   const t = useT();
+  const canSave = useFeature("saved");
   const [saved, setSaved] = useState<boolean | null>(null);
   useEffect(() => { sb().auth.getUser().then(async ({ data }) => { if (!data.user) return setSaved(false); const { data: s } = await sb().from("saved_listings").select("event_id").eq("user_id", data.user.id).eq("event_id", id).maybeSingle(); setSaved(!!s); }); }, [id]);
   const share = async () => {
@@ -33,9 +35,11 @@ export default function ListingActions({ id, slug, title, line }: { id: string; 
   };
   return (
     <>
-      <button className="icon" style={{ position: "absolute", top: 12, insetInlineEnd: 60 }} aria-label={t("save")} aria-pressed={!!saved} onClick={heart}>
-        <span style={{ fontSize: 18, lineHeight: 1 }}>{saved ? "♥" : "♡"}</span>
-      </button>
+      {canSave && (
+        <button className="icon" style={{ position: "absolute", top: 12, insetInlineEnd: 60 }} aria-label={t("save")} aria-pressed={!!saved} onClick={heart}>
+          <span style={{ fontSize: 18, lineHeight: 1 }}>{saved ? "♥" : "♡"}</span>
+        </button>
+      )}
       <button className="icon" style={{ position: "absolute", top: 12 }} aria-label={t("share")} onClick={share}>
         <span style={{ width: 20, height: 20, display: "block" }}><I.share /></span>
       </button>

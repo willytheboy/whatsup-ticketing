@@ -46,8 +46,10 @@ export async function ticketImage(a: { title: string; line1: string; line2: stri
   const c = document.createElement("canvas"); c.width = 1080; c.height = 1350;
   const ctx = c.getContext("2d"); if (!ctx) return null;
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 1080, 1350);
-  // facet band
-  const band = [["#3B6D11", [0, 0, 380, 0, 220, 160]], ["#639922", [220, 160, 380, 0, 760, 0, 600, 160]], ["#97C459", [600, 160, 760, 0, 1080, 0, 1080, 160]], ["#A32D2D", [860, 160, 900, 60, 940, 160]]] as [string, number[]][];
+  // facet band in the active theme's tokens (globals.css), so a white-label tenant's saved ticket matches its app
+  const cs = typeof getComputedStyle === "function" ? getComputedStyle(document.documentElement) : null;
+  const tok = (n: string, d: string) => cs?.getPropertyValue(n).trim() || d;
+  const band = [[tok("--b1", "#3B6D11"), [0, 0, 380, 0, 220, 160]], [tok("--b2", "#639922"), [220, 160, 380, 0, 760, 0, 600, 160]], [tok("--b3", "#97C459"), [600, 160, 760, 0, 1080, 0, 1080, 160]], [tok("--cedar", "#A32D2D"), [860, 160, 900, 60, 940, 160]]] as [string, number[]][];
   for (const [col, pts] of band) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]); ctx.closePath(); ctx.fill(); }
   ctx.fillStyle = "#7A7975"; ctx.font = "600 30px -apple-system, Segoe UI, Roboto, sans-serif"; ctx.fillText("WHAT'S UP LEBANON · TICKET", 64, 240);
   ctx.fillStyle = "#000"; ctx.font = "700 60px -apple-system, Segoe UI, Roboto, sans-serif";
@@ -56,7 +58,7 @@ export async function ticketImage(a: { title: string; line1: string; line2: stri
   ctx.setLineDash([12, 12]); ctx.strokeStyle = "#DDDBD3"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(64, y + 170); ctx.lineTo(1016, y + 170); ctx.stroke(); ctx.setLineDash([]);
   if (a.qrCanvas) ctx.drawImage(a.qrCanvas, 64, y + 220, 520, 520);
   ctx.fillStyle = "#000"; ctx.font = "400 34px -apple-system, Segoe UI, Roboto, sans-serif"; ctx.fillText(a.holder, 640, y + 300);
-  ctx.fillStyle = "#A32D2D"; ctx.font = "700 44px -apple-system, Segoe UI, Roboto, sans-serif"; ctx.fillText(a.code, 640, y + 370);
+  ctx.fillStyle = tok("--red-dark", "#A32D2D"); ctx.font = "700 44px -apple-system, Segoe UI, Roboto, sans-serif"; ctx.fillText(a.code, 640, y + 370);
   ctx.fillStyle = "#7A7975"; ctx.font = "400 28px -apple-system, Segoe UI, Roboto, sans-serif"; ctx.fillText("Show the QR at the door.", 640, y + 430); ctx.fillText("Works offline.", 640, y + 470);
   ctx.fillText("All prices all-in · Tickets on WhatsApp · Cash welcome", 64, 1300);
   return new Promise((res) => c.toBlob((b) => res(b), "image/png"));

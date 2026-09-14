@@ -173,7 +173,7 @@ export async function POST(req: Request) {
         plan: [day?.title, dinner?.title, night?.title].filter(Boolean),
       };
     }
-    const plan = (v.plan ?? []).map((tt: string) => resolve(tt)).filter(Boolean).map((l: Listing) => ({ slug: l.slug, title: lang === "ar" && l.title_ar ? l.title_ar : l.title }));
+    const plan = (v.plan ?? []).map((tt: string) => resolve(tt)).filter(Boolean).map((l: Listing) => ({ slug: l.slug, title: lang === "ar" && l.title_ar ? l.title_ar : l.title, cover_url: l.cover_url ?? null }));
     return NextResponse.json({ name: v.name, line: v.line, bpm: v.bpm ?? 110, plan, ai: !!process.env.ANTHROPIC_API_KEY });
   }
 

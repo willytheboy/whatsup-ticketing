@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { t, type Lang } from "./i18n";
+import { brandify } from "./features";
+import { useBrand } from "@/components/Config";
 
 /** Current UI language, read from <html lang> after hydration (server-rendered from the cookie). */
 export function useLang(): Lang {
@@ -12,7 +14,8 @@ export function useLang(): Lang {
 }
 export function useT() {
   const lang = useLang();
-  return (key: string) => t(lang, key);
+  const brand = useBrand();
+  return (key: string) => brandify(t(lang, key), brand);
 }
 /** Persist the language choice and reload so the server re-renders with the right direction. */
 export function setLang(lang: Lang) {

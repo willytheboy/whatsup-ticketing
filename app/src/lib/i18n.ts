@@ -240,6 +240,23 @@ const D: Record<string, [string, string]> = {
   tipVenue: ["Tip the venue", "ادعم المكان"], subscribe: ["Monthly listener", "مستمع شهري"], subscribed: ["You're a monthly listener — 30 days of every stream", "صرت مستمع شهري — ٣٠ يوم لكل بث"],
   tipped: ["Tipped", "دعمت"], tippedMsg: ["tipped the venue", "دعم المكان"], requestPh: ["Request a track", "اطلب أغنية"], requestMsg: ["Request", "طلب"], requested2: ["Request sent to the room", "انبعت الطلب للغرفة"],
   supportNote: ["Tips go 90% to the venue; subscriptions 70%. Card in sandbox settles instantly.", "٩٠٪ من الدعم للمكان؛ ٧٠٪ من الاشتراكات. البطاقة التجريبية بتتسوّى فوراً."],
+  // v0.7 · pricing assistant, add-ons, taste feed, door intelligence
+  tab_pricing: ["Pricing", "التسعير"], tab_addons: ["Add-ons", "الإضافات"],
+  pricingSub: ["Pace per offer from real sales. Suggestions are arithmetic, not magic; nothing changes until you tap.", "وتيرة كل عرض من المبيعات الحقيقية. الاقتراحات حساب بسيط؛ ما بيتغيّر شي قبل ما تكبس."],
+  paceSold: ["sold", "مباع"], paceWeek: ["last 7 days", "آخر ٧ أيام"], paceDay: ["last 24h", "آخر ٢٤ ساعة"], paceDaysLeft: ["days to go", "أيام باقية"], paceProjected: ["projected", "متوقّع"],
+  paceSlow: ["Slow", "بطيء"], paceHot: ["Selling fast", "عم يمشي بسرعة"], paceTrack: ["On track", "عالطريق"], paceSoldOut: ["Sold out", "نفدت"], pacePast: ["Ended", "انتهى"],
+  paceSlowB: ["Under {pct}% projected. A short flash code moves the people who saved it.", "متوقّع تحت {pct}٪. كود سريع بيحرّك اللي محفوظين الإعلان."],
+  paceHotB: ["On course to sell out. Consider a higher-priced next tier (+{pct}%).", "عالطريق ينفد. فكّر بفئة جاية أغلى (+{pct}٪)."],
+  paceTrackB: ["Keep going. Check again after the weekend.", "كمّل. عيد النظرة بعد الويكند."],
+  flashBtn: ["Flash code {pct}% · {hours}h", "كود سريع {pct}٪ · {hours} ساعة"], flashMade: ["Code {code} is live for {hours}h — share it in your Story.", "الكود {code} شغّال لـ {hours} ساعة — انشره بالستوري."],
+  flashActive: ["Active flash codes", "أكواد سريعة شغّالة"], noPace: ["No sales data yet — publish the listing and check back tomorrow.", "ما في بيانات بعد — انشر الإعلان وعيد النظرة بكرا."],
+  addonsNote: ["Extras sold on top of any offer at checkout: fast lane, parking, locker, towel… Per order or per ticket.", "إضافات بتنباع فوق أي عرض عند الدفع: مدخل سريع، موقف، خزانة، منشفة… عالطلب أو عالتذكرة."],
+  addonName: ["Add-on", "إضافة"], addonPer: ["Charged per", "السعر لكل"], perOrder: ["order", "طلب"], perTicket2: ["ticket", "تذكرة"], addonMax: ["Max per order", "الحد بالطلب"], addAddon: ["Add an add-on", "ضيف إضافة"],
+  addons: ["Add-ons", "الإضافات"], addonsPick: ["Extras", "إضافات"], fastLane: ["Fast lane", "مدخل سريع"], parking: ["Parking", "موقف"],
+  becauseYouLiked: ["Because you liked", "لأنك حبيت"],
+  locked: ["Locked", "مقفول"], lockedNote: ["This ticket was scanned as a duplicate 3 times in 10 minutes and is frozen. Release it from the list below if the person is genuine.", "هالتذكرة انمسحت مكرّرة ٣ مرات بـ ١٠ دقايق وانقفلت. حرّرها من اللائحة إذا الشخص حقيقي."],
+  release: ["Release", "حرّر"], lockedTickets: ["Locked tickets", "تذاكر مقفولة"],
+  forecast30: ["Next 30 days", "الـ ٣٠ يوم الجايين"],
   // v0.6 · intelligence
   copilot: ["Venue copilot", "مساعد المكان"], copilotQ1: ["What should I do this week?", "شو أعمل هالأسبوع؟"], copilotPh: ["Ask about your sales, a listing, a promoter…", "اسأل عن مبيعاتك، إعلان، مروّج…"],
 };

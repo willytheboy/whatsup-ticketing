@@ -7,7 +7,7 @@ import { useT } from "@/lib/lang";
 import { I } from "./Icons";
 
 type Msg = { id: number; room_id: string; user_id: string; body: string; name: string; created_at?: string };
-const COLORS = ["#97C459", "#639922", "#3B6D11", "#7A7975", "#B45309"];
+const COLORS = ["var(--g3)", "var(--g2)", "var(--g1)", "var(--ink3)", "var(--amber)"];
 const colorOf = (id: string) => COLORS[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
 
 /** Realtime room (brief §5.9): avatars, messages, a translated line under Arabic messages when the UI is English, compose bar.

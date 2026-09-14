@@ -3,11 +3,13 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import { sb } from "@/lib/supabase-browser";
+import { FeatureOff, useFeature } from "@/components/Config";
 import { useT } from "@/lib/lang";
 
 /** Creates a squad for a listing from the wallet or the listing page, then opens it. */
 function NewSquadInner() {
   const t = useT();
+  const featureOn = useFeature("squads");
   const sp = useSearchParams();
   const router = useRouter();
   const [err, setErr] = useState("");
@@ -27,6 +29,7 @@ function NewSquadInner() {
       router.replace(`/squad/${sq.id}`);
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!featureOn) return <FeatureOff back="/wallet" />;
   return <><TopBar back="/wallet" title={t("squad")} /><main><div className="empty">{err || t("loading")}</div></main></>;
 }
 export default function NewSquad() { return <Suspense><NewSquadInner /></Suspense>; }

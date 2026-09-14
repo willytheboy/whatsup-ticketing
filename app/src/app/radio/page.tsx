@@ -4,13 +4,14 @@ import Link from "next/link";
 import Band from "@/components/Band";
 import Player from "@/components/Player";
 import { sb } from "@/lib/supabase-browser";
+import { FeatureOff, useFeature } from "@/components/Config";
 import { useLang, useT } from "@/lib/lang";
 import { startSynth, stopSynth } from "@/lib/synth";
 import { tone } from "@/lib/config";
 
 type Stream = {
   id: string; slug: string; title: string; title_ar: string | null; kind: string; source: string; status: string; access: string;
-  pass_price: number; playback_url: string | null; description: string | null; listeners: number; venue_id: string | null;
+  pass_price: number; playback_url: string | null; description: string | null; listeners: number; venue_id: string | null; cover_url?: string | null;
   venues: { id: string; name: string; name_ar: string | null; city: string } | null;
 };
 type Vibe = { name: string; line: string; bpm?: number };
@@ -19,6 +20,7 @@ type Vibe = { name: string; line: string; bpm?: number };
     Venues stream their own music; the "Your vibe" station always plays a generated track. */
 export default function RadioPage() {
   const t = useT();
+  const featureOn = useFeature("radio");
   const lang = useLang();
   const [streams, setStreams] = useState<Stream[] | null>(null);
   const [idx, setIdx] = useState(0);
@@ -46,6 +48,8 @@ export default function RadioPage() {
     sb().from("events").select("slug,title,title_ar").eq("venue_id", st.venue_id).in("status", ["live", "sold_out"]).order("starts_at").limit(1).maybeSingle().then(({ data }) => setListing((data as any) ?? null));
   }, [st?.venue_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (!featureOn) return <FeatureOff back="/" />;
+
   const toggle = () => {
     const next = !playing;
     setPlaying(next);
@@ -68,8 +72,8 @@ export default function RadioPage() {
       <div className="stations">
         {stations.map((s, i) => (
           <button key={s.id} className={`station ${idx === i ? "on" : ""}`} onClick={() => tune(i)}>
-            <div className="art" style={{ background: s.id === "vibe" ? "var(--g3)" : (s as Stream).status === "live" ? "var(--red)" : tone(s.id) }}>
-              {s.id !== "vibe" && (s as Stream).status === "live" ? "LIVE" : s.id === "vibe" ? "✦" : ""}
+            <div className="art" style={{ background: s.id === "vibe" ? "var(--g3)" : (s as Stream).cover_url ? `center/cover url(${(s as Stream).cover_url})` : (s as Stream).status === "live" ? "var(--red)" : tone(s.id), position: "relative" }}>
+              {s.id !== "vibe" && (s as Stream).status === "live" ? <span style={{ background: "var(--red)", color: "#fff", fontSize: 10, padding: "2px 6px", borderRadius: 6 }}>LIVE</span> : s.id === "vibe" ? "✦" : ""}
             </div>
             <p>{s.id === "vibe" ? t("yourVibe") : name(s)}</p>
           </button>

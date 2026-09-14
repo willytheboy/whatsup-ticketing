@@ -1,6 +1,7 @@
 /** The facet band (brief §3.4): flat low-poly landscape in three greens with one red cedar, inline SVG,
     preserveAspectRatio="none", at fixed heights. Never a raster, never a gradient, never animated. */
-const G1 = "#3B6D11", G2 = "#639922", G3 = "#97C459", RD = "#A32D2D", RH = "#E24B4A";
+// the fills are tokens (globals.css) so the facet follows the tenant theme
+const G1 = "var(--b1)", G2 = "var(--b2)", G3 = "var(--b3)", RD = "var(--cedar)", RH = "var(--cedar2)";
 
 const SHAPES: Record<number, [string, string][]> = {
   120: [
