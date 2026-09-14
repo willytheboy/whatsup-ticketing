@@ -55,7 +55,7 @@ export default function WhatsApp() {
       </div>
       {mode?.mode !== "live" && <div className="note" style={{ marginBottom: 12 }}>Sandbox: replies are rendered and logged (Messages), not sent. Set <code>WHATSAPP_TOKEN</code>, <code>WHATSAPP_PHONE_ID</code>, <code>WHATSAPP_VERIFY_TOKEN</code> and <code>WHATSAPP_APP_SECRET</code> on the <code>wa-inbound</code> function and point the Meta webhook at <code>{SUPABASE_URL}/functions/v1/wa-inbound</code>. Add <code>ANTHROPIC_API_KEY</code> for Claude phrasing.</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 14 }}>
+      <div className="grid3">
         <Panel title={`Conversations · ${list.length}`}>
           {rows === null ? <Empty>Loading…</Empty> : !list.length ? <Empty>No conversations yet.</Empty> : (
             <div className="tbl-wrap"><table className="tbl">

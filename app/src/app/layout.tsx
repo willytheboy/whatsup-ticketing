@@ -19,7 +19,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export async function generateViewport(): Promise<Viewport> {
   const cfg = await getTenantConfig();
-  return { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: THEME_COLOR[cfg.theme] };
+  // Locked to the device: no pinch/double-tap zoom and no focus zoom, so the page can never be panned sideways on a phone or PDA.
+  return { width: "device-width", initialScale: 1, maximumScale: 1, userScalable: false, viewportFit: "cover", themeColor: THEME_COLOR[cfg.theme] };
 }
 
 /** System font stack only (brief §3.3): the app must render offline and from a local file on iOS Safari.

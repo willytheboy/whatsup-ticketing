@@ -306,7 +306,7 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
                 </div>
                 <div className="eyebrow">{t("packages")}</div>
                 {(x.packages ?? []).map((p, q) => (
-                  <div key={p.id} className="grid3" style={{ gridTemplateColumns: "2fr 2fr 1fr" }}>
+                  <div key={p.id} className="grid3 cols3">
                     <input value={p.name} onChange={(e) => setPkg(i, q, "name", e.target.value)} placeholder={t("pkgName")} />
                     <input dir="rtl" value={p.name_ar ?? ""} onChange={(e) => setPkg(i, q, "name_ar", e.target.value)} placeholder={t("fNameAr")} />
                     <input inputMode="decimal" value={p.price} onChange={(e) => setPkg(i, q, "price", e.target.value)} placeholder="$" />

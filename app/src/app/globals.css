@@ -47,8 +47,13 @@ html[data-theme=ultraviolet] .chip.on,html[data-theme=ultraviolet] .slot.on,html
 html[data-theme=sunset] .chip.on,html[data-theme=sunset] .slot.on,html[data-theme=sunset] .btn.black,html[data-theme=sunset] .member,html[data-theme=sunset] .me{background:var(--g0);border-color:var(--g0)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0}
-html{-webkit-text-size-adjust:100%;background:var(--page)}
-body{background:var(--page);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+/* The page is locked to the device width: the viewport clips sideways (hidden for old WebViews, clip where supported so sticky bars keep working),
+   sideways finger pans are refused at the page level (rails, tables and maps are their own scroll containers and still pan), and no sideways bounce. */
+html{-webkit-text-size-adjust:100%;background:var(--page);overflow-x:hidden;overflow-x:clip;overscroll-behavior-x:none}
+body{background:var(--page);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;position:relative;width:100%;max-width:100%;overflow-x:clip;overscroll-behavior-x:none;touch-action:pan-y}
+img,svg,video,canvas,iframe{max-width:100%}
+input,select,textarea{min-width:0;max-width:100%}
+pre,code{overflow-wrap:anywhere;white-space:pre-wrap}
 html[dir=rtl] body,html[dir=rtl] input,html[dir=rtl] button,html[dir=rtl] select,html[dir=rtl] textarea{font-family:var(--font-ar)}
 a{color:inherit;text-decoration:none}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -75,8 +80,8 @@ h2{font-size:18px;font-weight:600;margin:16px 0 8px}
 .proto{font-size:11px;color:var(--ink3);text-align:center}
 
 /* ---------- stage ---------- */
-.stage{max-width:430px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;background:#fff;position:relative}
-@media(min-width:700px){.stage{margin-block:24px;min-height:calc(100dvh - 48px);border-radius:44px;border:10px solid #111;box-shadow:0 30px 60px rgba(0,0,0,.25);overflow:hidden;max-width:410px}}
+.stage{max-width:430px;margin:0 auto;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;background:#fff;position:relative}
+@media(min-width:700px){.stage{margin-block:24px;min-height:calc(100vh - 48px);min-height:calc(100dvh - 48px);border-radius:44px;border:10px solid #111;box-shadow:0 30px 60px rgba(0,0,0,.25);overflow:hidden;max-width:410px}}
 main{flex:1 1;padding:14px 18px 96px;display:flex;flex-direction:column;gap:14px}
 main.flush{padding-top:0}
 .pad{padding:14px 18px}
@@ -217,8 +222,9 @@ html[dir=rtl] .brand .w2{letter-spacing:0}
 .line{display:flex;justify-content:space-between;gap:12px;font-size:14px}
 .line.total{font-weight:800;font-size:17px;border-top:1px dashed var(--line);padding-top:10px}
 .err{background:#FBE3E2;color:var(--red-dark);border-radius:10px;padding:10px 12px;font-size:13.5px}
-.seg{display:flex;gap:4px;background:var(--sand);border-radius:12px;padding:4px}
-.seg button{flex:1 1;padding:8px 10px;border-radius:9px;font-size:12.5px;font-weight:600;color:var(--ink3);text-align:center}
+.seg{display:flex;gap:4px;background:var(--sand);border-radius:12px;padding:4px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.seg::-webkit-scrollbar{display:none}
+.seg button{flex:1 1;min-width:max-content;padding:8px 10px;border-radius:9px;font-size:12.5px;font-weight:600;color:var(--ink3);text-align:center}
 .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 
 /* ---------- wallet ---------- */
@@ -302,7 +308,7 @@ html[dir=rtl] .bot{align-self:flex-end;border-radius:14px 14px 3px 14px}
 
 /* ---------- sheet & toast ---------- */
 .sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:40}
-.sheet>div{background:#fff;width:100%;max-width:430px;border-radius:18px 18px 0 0;padding:16px 18px calc(20px + env(safe-area-inset-bottom));max-height:70dvh;overflow:auto}
+.sheet>div{background:#fff;width:100%;max-width:430px;border-radius:18px 18px 0 0;padding:16px 18px calc(20px + env(safe-area-inset-bottom));max-height:70vh;max-height:70dvh;overflow:auto}
 .cbtn{width:100%;display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px;min-height:44px}
 .cbtn:last-child{border-bottom:0}
 .toast{position:fixed;left:50%;transform:translate(-50%,6px);bottom:calc(96px + env(safe-area-inset-bottom));width:min(calc(100% - 36px),394px);background:var(--ink);color:#fff;font-size:13px;padding:11px 14px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none;z-index:50}
@@ -310,15 +316,18 @@ html[dir=rtl] .bot{align-self:flex-end;border-radius:14px 14px 3px 14px}
 
 /* ---------- phone tweaks ---------- */
 @media (max-width:699px){
-  .stage,body,html{overflow-x:clip;width:100%}
-  input,select,textarea{font-size:16px}
+  .stage{overflow-x:clip;width:100%}
+}
+/* Touch devices: every text control is at least 16px so iOS does not zoom the page on focus (a zoomed page pans sideways). Same specificity as the rules above, declared later. */
+@media (pointer:coarse),(max-width:899px){
+  input,select,textarea,.gift input,.field input,.field textarea,.field select,.compose input,.bo .field input,.bo .field select,.bo .field textarea,.bo .toolbar input,.bo .toolbar select,.tierrow input,.tbl input,.tbl select{font-size:16px}
 }
 
 /* =====================================================================
    BACK OFFICE (/admin) — same tokens, laptop sidebar + PDA bottom bar
    ===================================================================== */
-.bo{min-height:100dvh;display:grid;grid-template-columns:232px 1fr;background:var(--sand);font-size:14px}
-.bo-side{position:-webkit-sticky;position:sticky;top:0;height:100dvh;border-inline-end:1px solid var(--line);background:#fff;display:flex;flex-direction:column;padding:14px 12px;gap:4px;overflow-y:auto}
+.bo{min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:232px 1fr;background:var(--sand);font-size:14px}
+.bo-side{position:-webkit-sticky;position:sticky;top:0;height:100vh;height:100dvh;border-inline-end:1px solid var(--line);background:#fff;display:flex;flex-direction:column;padding:14px 12px;gap:4px;overflow-y:auto}
 .bo-side .brand{padding:6px 8px 14px;flex:0 0 auto}
 .bo-nav{display:flex;flex-direction:column;gap:2px}
 .bo-nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font-weight:600;font-size:13.5px;color:var(--ink2)}
@@ -351,6 +360,8 @@ html[dir=rtl] .bot{align-self:flex-end;border-radius:14px 14px 3px 14px}
 .bo .stat.good b{color:var(--g1)}
 .bo .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .bo .grid3{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.grid3.cols3{display:grid;grid-template-columns:2fr 2fr 1fr;gap:10px}
+
 .bo .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
 .bo .panel>h2{margin-bottom:10px}
 .bo .card{padding:14px}
@@ -374,7 +385,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .bo .field input,.bo .field select,.bo .field textarea{padding:10px 12px;font-size:14px;min-height:40px}
 .bo .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;align-items:end}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:grid;place-items:center;padding:16px}
-.modal{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;width:min(560px,100%);max-height:90dvh;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.modal{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;width:min(560px,100%);max-height:90vh;max-height:90dvh;overflow:auto;display:flex;flex-direction:column;gap:12px}
 .jline{display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}
 .jline:last-child{border-bottom:0}
 .jline .dim{color:var(--ink3);font-size:12px}
@@ -384,6 +395,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .print-only{display:none}
 @media (max-width:899px){
   .bo{grid-template-columns:1fr}
+  .bo .row.between,.bo-head,.bo .toolbar{flex-wrap:wrap}
+  .bo-head>*,.bo .toolbar>*{min-width:0;max-width:100%}
+  .bo .row.between>.row{flex-wrap:wrap}
+  .bo .note code{overflow-wrap:anywhere}
   .bo-side{display:none}
   .bo-top{display:flex}
   .bo-bottom{display:block}
