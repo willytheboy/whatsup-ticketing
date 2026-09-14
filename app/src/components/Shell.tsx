@@ -13,7 +13,7 @@ const TABS: [string, string, keyof typeof I][] = [
   ["/vibe", "nVibe", "vibe"],
   ["/wallet", "nWallet", "wallet"],
 ];
-const HIDE = ["/checkout", "/t/", "/login", "/story/", "/org/new", "/org/promote", "/room/", "/admin"];
+const HIDE = ["/checkout", "/t/", "/login", "/story/", "/org/new", "/org/promote", "/room/", "/admin", "/claim/", "/squad/"];
 
 /** Six tabs for everyone (brief §4.4). Venue tools live behind Profile → Venue, so buyers never see them. */
 function Tabs() {

@@ -4,7 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { sb } from "./supabase-browser";
 import { planOf, type PlanId } from "./config";
 
-export type Org = { id: string; tenant_id: string; name: string; name_ar: string | null; plan: PlanId; plan_until: string | null; verified: boolean; role: string };
+export type Org = { id: string; tenant_id: string; name: string; name_ar: string | null; plan: PlanId; plan_until: string | null; verified: boolean; role: string; whatsapp: string | null; credit_month: string | null };
 
 /** The signed-in user's venue / organiser account (first one) and its plan. */
 export function useOrg() {

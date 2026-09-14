@@ -34,9 +34,9 @@ Deno.serve(async (req) => {
     return json({ ok: !!ok });
   }
   if (b.action === "manifest") {
-    const { data: rows } = await db.from("tickets").select("id,code,state,seat,scanned_at,valid_until,tier_id,tiers(name,kind),holder:profiles!holder_id(name)").eq("event_id", ev.id).in("state", ["valid", "scanned", "reserved"]);
+    const { data: rows } = await db.from("tickets").select("id,code,token,state,seat,scanned_at,valid_until,tier_id,tiers(name,kind),holder:profiles!holder_id(name)").eq("event_id", ev.id).in("state", ["valid", "scanned", "reserved"]);
     const { data: counts } = await db.from("tiers").select("id,name,kind,capacity,sold").eq("event_id", ev.id);
-    return json({ event: { id: ev.id, title: ev.title }, at: new Date().toISOString(), tickets: (rows ?? []).map((r: any) => ({ id: r.id, code: r.code, state: r.state, seat: r.seat, scanned_at: r.scanned_at, valid_until: r.valid_until, tier: r.tiers?.name ?? null, kind: r.tiers?.kind ?? (r.tier_id ? "ticket" : "table"), holder: r.holder?.name ?? null })), tiers: counts ?? [] });
+    return json({ event: { id: ev.id, title: ev.title }, at: new Date().toISOString(), tickets: (rows ?? []).map((r: any) => ({ id: r.id, code: r.code, token: r.token, state: r.state, seat: r.seat, scanned_at: r.scanned_at, valid_until: r.valid_until, tier: r.tiers?.name ?? null, kind: r.tiers?.kind ?? (r.tier_id ? "ticket" : "table"), holder: r.holder?.name ?? null })), tiers: counts ?? [] });
   }
   if (b.action === "lookup") {
     const q = String(b.q ?? "").trim();

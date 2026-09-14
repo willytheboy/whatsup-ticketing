@@ -2,56 +2,98 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import TopBar from "@/components/TopBar";
+import { useToast } from "@/components/Toast";
 import { sb } from "@/lib/supabase-browser";
 import { money, fmtDate, PROCESSING_PCT, hasPlan } from "@/lib/config";
 import { useLang, useT } from "@/lib/lang";
 import { useOrg } from "@/lib/org";
-import { left as leftOf } from "@/lib/catalogue";
+import { nudgesFor, forecast } from "@/lib/forecast";
 
 type Stat = { event_id: string; title: string; starts_at: string; status: string; capacity: number; sold: number; gross: number; buyer_fees: number; organiser_fees: number; processing_fees: number; deposits: number; checked_in: number };
 type Tier = { id: string; event_id: string; name: string; name_ar: string | null; kind: string; capacity: number; sold: number; held: number };
-type Ev = { id: string; slug: string; title: string; title_ar: string | null; kind: string; status: string; featured_until: string | null; venue_id: string | null };
-type Stream = { id: string; slug: string; title: string; status: string; venue_id: string | null };
+type Ev = { id: string; slug: string; title: string; title_ar: string | null; kind: string; status: string; featured_until: string | null; venue_id: string | null; cover_url: string | null; starts_at: string; created_at: string };
+type Stream = { id: string; slug: string; title: string; status: string; venue_id: string | null; playback_url: string | null; source: string | null };
+type Day = { day: string; tickets: number; gross: number };
+type Promoter = { name: string; clicks: number; sales: number; tier: string };
 
-/** Venue dashboard (brief §5.13): KPIs, inventory with sell-through, payout waterfall, plan, station, tools. */
+/** Venue dashboard (brief §5.13): KPIs, 7-day chart, nudges, inventory with sell-through and forecast, payout waterfall, plan, station, tools. */
 export default function OrganiserHub() {
   const t = useT();
   const lang = useLang();
-  const { user, org, plan } = useOrg();
+  const toast = useToast();
+  const { user, org, plan, reload } = useOrg();
   const [stats, setStats] = useState<Stat[] | null>(null);
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [events, setEvents] = useState<Ev[]>([]);
   const [streams, setStreams] = useState<Stream[]>([]);
+  const [days, setDays] = useState<Day[]>([]);
+  const [promoters, setPromoters] = useState<Promoter[]>([]);
   const [payout, setPayout] = useState<number | null>(null);
+  const [refunds, setRefunds] = useState(0);
+  const [waits, setWaits] = useState<Record<string, number>>({});
+  const [wa, setWa] = useState<string>("");
+  const [editWa, setEditWa] = useState(false);
+  const [streamUrl, setStreamUrl] = useState<Record<string, string>>({});
 
-  useEffect(() => {
+  const load = async () => {
     if (!org) return;
-    (async () => {
-      const [{ data: s }, { data: e }, { data: p }] = await Promise.all([
-        sb().from("organiser_event_stats").select("*").eq("organiser_id", org.id).order("starts_at"),
-        sb().from("events").select("id,slug,title,title_ar,kind,status,featured_until,venue_id").eq("organiser_id", org.id).neq("status", "archived").order("starts_at"),
-        sb().from("payouts").select("amount,status").eq("organiser_id", org.id).eq("status", "scheduled").order("period_end", { ascending: false }).limit(1).maybeSingle(),
+    setWa(org.whatsapp ?? "");
+    const since = new Date(Date.now() - 6 * 864e5); since.setHours(0, 0, 0, 0);
+    const [{ data: s }, { data: e }, { data: p }, { data: d }, { data: pr }, { count: rc }] = await Promise.all([
+      sb().from("organiser_event_stats").select("*").eq("organiser_id", org.id).order("starts_at"),
+      sb().from("events").select("id,slug,title,title_ar,kind,status,featured_until,venue_id,cover_url,starts_at,created_at").eq("organiser_id", org.id).neq("status", "archived").order("starts_at"),
+      sb().from("payouts").select("amount,status").eq("organiser_id", org.id).eq("status", "scheduled").order("period_end", { ascending: false }).limit(1).maybeSingle(),
+      sb().from("organiser_daily_sales").select("day,tickets,gross").eq("organiser_id", org.id).gte("day", since.toISOString().slice(0, 10)).order("day"),
+      sb().from("promoter_stats").select("name,clicks,sales,tier").eq("organiser_id", org.id),
+      sb().from("v_org_refunds").select("id", { count: "exact", head: true }).eq("organiser_id", org.id).eq("refund_status", "requested"),
+    ]);
+    setStats((s ?? []) as Stat[]);
+    const evs = (e ?? []) as Ev[];
+    setEvents(evs);
+    setPayout(p ? Number(p.amount) : null);
+    setDays((d ?? []) as Day[]);
+    setPromoters((pr ?? []) as Promoter[]);
+    setRefunds(rc ?? 0);
+    if (evs.length) {
+      const [{ data: tr }, { data: st }] = await Promise.all([
+        sb().from("tiers").select("id,event_id,name,name_ar,kind,capacity,sold,held").in("event_id", evs.map((x) => x.id)).lt("capacity", 5000),
+        sb().from("v_streams").select("id,slug,title,status,venue_id,playback_url,source").in("venue_id", Array.from(new Set(evs.map((x) => x.venue_id).filter(Boolean))) as string[]),
       ]);
-      setStats((s ?? []) as Stat[]);
-      const evs = (e ?? []) as Ev[];
-      setEvents(evs);
-      setPayout(p ? Number(p.amount) : null);
-      if (evs.length) {
-        const [{ data: tr }, { data: st }] = await Promise.all([
-          sb().from("tiers").select("id,event_id,name,name_ar,kind,capacity,sold,held").in("event_id", evs.map((x) => x.id)).lt("capacity", 5000),
-          sb().from("v_streams").select("id,slug,title,status,venue_id").in("venue_id", Array.from(new Set(evs.map((x) => x.venue_id).filter(Boolean))) as string[]),
-        ]);
-        setTiers((tr ?? []) as Tier[]);
-        setStreams((st ?? []) as Stream[]);
+      setTiers((tr ?? []) as Tier[]);
+      setStreams((st ?? []) as Stream[]);
+      const ids = (tr ?? []).map((x: any) => x.id);
+      if (ids.length) {
+        const { data: w } = await sb().from("waitlist").select("tier_id").in("tier_id", ids).is("notified_at", null);
+        const m: Record<string, number> = {}; for (const r of w ?? []) m[r.tier_id] = (m[r.tier_id] ?? 0) + 1; setWaits(m);
       }
-    })();
-  }, [org?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    }
+  };
+  useEffect(() => { load(); }, [org?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveWa = async () => {
+    if (!org) return;
+    const v = wa.replace(/[^\d+]/g, "");
+    const { error } = await sb().from("organisers").update({ whatsapp: v || null }).eq("id", org.id);
+    if (error) return toast(error.message);
+    setEditWa(false); toast(t("savedOk")); reload();
+  };
+  const setLive = async (s: Stream, status: "live" | "ended" | "offline") => {
+    if (status === "live" && streamUrl[s.id]) await sb().rpc("org_set_stream_url", { p_stream: s.id, p_source: "hls", p_url: streamUrl[s.id] });
+    const { error } = await sb().rpc("org_set_stream_status", { p_stream: s.id, p_status: status });
+    if (error) return toast(error.message);
+    toast(status === "live" ? t("onAirNow") : t("offline")); load();
+  };
 
   const sum = (k: keyof Stat) => (stats ?? []).reduce((a, s) => a + Number(s[k] ?? 0), 0);
   const gross = sum("gross"), fees = sum("buyer_fees"), orgFee = sum("organiser_fees"), proc = sum("processing_fees"), deposits = sum("deposits");
   const receive = gross - orgFee - proc + deposits;
   const name = (x: { title: string; title_ar: string | null }) => (lang === "ar" && x.title_ar ? x.title_ar : x.title);
   const unit = (k: string) => t(k === "table" ? "covers" : k === "daypass" ? "sunbeds" : k === "stay" ? "rooms" : k === "item" ? "stock" : "seats");
+  const week: Day[] = Array.from({ length: 7 }, (_, i) => { const d = new Date(Date.now() - (6 - i) * 864e5); const key = d.toISOString().slice(0, 10); const row = days.find((x) => x.day === key); return { day: key, tickets: Number(row?.tickets ?? 0), gross: Number(row?.gross ?? 0) }; });
+  const maxG = Math.max(1, ...week.map((x) => x.gross));
+  const top = [...(stats ?? [])].sort((a, b) => Number(b.gross) - Number(a.gross)).slice(0, 3);
+  const clicks = promoters.reduce((a, p) => a + Number(p.clicks), 0), psales = promoters.reduce((a, p) => a + Number(p.sales), 0);
+  const nudges = org ? nudgesFor({ events, tiers, stats: stats ?? [], refunds, waits, plan: org.plan, whatsapp: org.whatsapp ?? null, lang }) : [];
 
   return (
     <>
@@ -72,6 +114,30 @@ export default function OrganiserHub() {
               <div className="kpi"><b className="num">{money(payout ?? receive)}</b><span>{t("payout")}</span></div>
             </div>
 
+            {/* 7-day sales */}
+            <div className="card pad">
+              <div className="row between"><span className="eyebrow">{t("last7")}</span><span className="small num">{money(week.reduce((a, x) => a + x.gross, 0))} · {week.reduce((a, x) => a + x.tickets, 0)} {t("sold")}</span></div>
+              <div className="bars" style={{ height: 80, marginTop: 10, marginBottom: 20 }}>
+                {week.map((x) => (
+                  <div key={x.day} style={{ height: `${Math.max(4, Math.round((x.gross / maxG) * 100))}%`, background: x.gross ? "var(--g2)" : "var(--sand)" }} title={`${x.day} · ${money(x.gross)}`}>
+                    <span>{new Date(x.day).toLocaleDateString(lang === "ar" ? "ar-LB" : "en-GB", { weekday: "short" })}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* nudges */}
+            {nudges.length > 0 && (
+              <div className="stack" style={{ gap: 8 }}>
+                {nudges.slice(0, 3).map((n, i) => (
+                  <Link key={i} href={n.href} className="card pad row" style={{ borderInlineStart: `4px solid ${n.tone === "red" ? "var(--red)" : n.tone === "amber" ? "#B45309" : "var(--g2)"}` }}>
+                    <div style={{ minWidth: 0 }}><div className="title" style={{ fontSize: 14 }}>{n.title}</div><div className="meta">{n.body}</div></div>
+                    <span className="btn xs line" style={{ flex: "none" }}>{n.cta}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+
             {/* the upgrade ladder */}
             <div className={`planbox ${org.plan === "pro" ? "pro" : org.plan === "venue" ? "venue" : ""}`}>
               <div className="row">
@@ -88,12 +154,13 @@ export default function OrganiserHub() {
             {events.map((e) => {
               const mine = tiers.filter((x) => x.event_id === e.id);
               const featured = e.featured_until && new Date(e.featured_until) > new Date();
+              const fc = forecast(e, mine);
               return (
                 <div key={e.id} className="card pad">
                   <div className="row">
                     <div style={{ minWidth: 0 }}>
                       <div className="title" style={{ fontSize: 14 }}>{name(e)}{featured ? " ★" : ""}</div>
-                      <div className="meta">{t(e.kind === "event" ? "events" : e.kind)} · {t(e.status === "live" ? "live" : e.status === "draft" ? "draftS" : e.status)}</div>
+                      <div className="meta">{t(e.kind === "event" ? "events" : e.kind)} · {t(e.status === "live" ? "live" : e.status === "draft" ? "draftS" : e.status)}{fc ? ` · ${t("forecast")} ${fc.pct}%${fc.soldOutBy ? ` · ${t("soldOutBy")} ${fmtDate(fc.soldOutBy)}` : ""}` : ""}</div>
                     </div>
                     <div className="row" style={{ gap: 6, flex: "none" }}>
                       <Link href={`/org/promote/${e.id}`} className="btn xs green">{t("promote")}</Link>
@@ -104,7 +171,7 @@ export default function OrganiserHub() {
                     const pct = Math.min(100, Math.round(((x.sold + x.held) / Math.max(x.capacity, 1)) * 100));
                     return (
                       <div key={x.id} style={{ marginTop: 8 }}>
-                        <div className="row"><span className="small" style={{ color: "var(--ink2)" }}>{lang === "ar" && x.name_ar ? x.name_ar : x.name} · {x.sold} / {x.capacity} {unit(x.kind)}</span><span className="small" style={{ color: pct >= 90 ? "var(--red-dark)" : "var(--ink3)" }}>{pct}%</span></div>
+                        <div className="row"><span className="small" style={{ color: "var(--ink2)" }}>{lang === "ar" && x.name_ar ? x.name_ar : x.name} · {x.sold} / {x.capacity} {unit(x.kind)}{waits[x.id] ? ` · ${waits[x.id]} ${t("waiting")}` : ""}</span><span className="small" style={{ color: pct >= 90 ? "var(--red-dark)" : "var(--ink3)" }}>{pct}%</span></div>
                         <div className="sell"><b style={{ width: `${pct}%`, background: pct >= 90 ? "var(--red)" : "var(--g2)" }} /></div>
                       </div>
                     );
@@ -113,6 +180,13 @@ export default function OrganiserHub() {
               );
             })}
             {!events.length && <div className="small">{t("noListings")}</div>}
+
+            {top.length > 1 && (
+              <div className="card pad">
+                <div className="eyebrow">{t("topListings")}</div>
+                {top.map((s, i) => <div key={s.event_id} className="row" style={{ padding: "6px 0", borderTop: i ? "1px solid var(--line)" : undefined }}><span className="small" style={{ color: "var(--ink2)" }}>{i + 1}. {s.title}</span><span className="small num">{money(Number(s.gross))} · {s.sold}</span></div>)}
+              </div>
+            )}
 
             <h2 style={{ margin: "4px 0 0" }}>{t("waterfall")}</h2>
             <div className="card pad" style={{ fontSize: 13 }}>
@@ -126,20 +200,45 @@ export default function OrganiserHub() {
               ))}
             </div>
 
+            {promoters.length > 0 && (
+              <div className="card pad">
+                <div className="row between"><span className="eyebrow">{t("promoters")}</span><Link href="/org/promoters" className="small" style={{ color: "var(--g1)", fontWeight: 600 }}>{t("open")} →</Link></div>
+                <div className="small" style={{ marginTop: 6 }}>{clicks} {t("clicks")} → {psales} {t("sales")} · {clicks ? Math.round((psales / clicks) * 100) : 0}% {t("conversion")}</div>
+              </div>
+            )}
+
             <h2 style={{ margin: "4px 0 0" }}>{t("station")}</h2>
             <div className="card pad">
               {streams.length ? streams.map((s) => (
-                <div key={s.id} className="row" style={{ padding: "4px 0" }}>
-                  <div><div className="title" style={{ fontSize: 14 }}>{s.title}</div><div className="meta">{s.status === "live" ? `● ${t("liveNow")}` : t("offline")}</div></div>
-                  <Link href={`/live/${s.slug}`} className="btn xs line">{t("open")}</Link>
+                <div key={s.id} style={{ padding: "4px 0" }}>
+                  <div className="row">
+                    <div><div className="title" style={{ fontSize: 14 }}>{s.title}</div><div className="meta">{s.status === "live" ? `● ${t("liveNow")}` : t("offline")}</div></div>
+                    <div className="row" style={{ gap: 6, flex: "none" }}>
+                      <Link href={`/live/${s.slug}`} className="btn xs line">{t("open")}</Link>
+                      {hasPlan(org.plan, "venue") && (s.status === "live" ? <button className="btn xs line" onClick={() => setLive(s, "ended")}>{t("endStream")}</button> : <button className="btn xs red" onClick={() => setLive(s, "live")}>{t("goLive")}</button>)}
+                    </div>
+                  </div>
+                  {hasPlan(org.plan, "venue") && s.status !== "live" && <div className="field" style={{ marginTop: 6 }}><input value={streamUrl[s.id] ?? s.playback_url ?? ""} onChange={(e) => setStreamUrl({ ...streamUrl, [s.id]: e.target.value })} placeholder={t("streamUrlPh")} /></div>}
                 </div>
               )) : <div className="meta">{t("stationNote")}</div>}
-              <div className="small" style={{ marginTop: 8 }}>{hasPlan(org.plan, "venue") ? t("manageStreams") : t("needsVenue")} {!hasPlan(org.plan, "venue") && <Link href="/org/plan" style={{ color: "var(--g1)", fontWeight: 600 }}>{t("upgrade")} →</Link>}</div>
+              <div className="small" style={{ marginTop: 8 }}>{hasPlan(org.plan, "venue") ? t("streamHelp") : t("needsVenue")} {!hasPlan(org.plan, "venue") && <Link href="/org/plan" style={{ color: "var(--g1)", fontWeight: 600 }}>{t("upgrade")} →</Link>}</div>
+            </div>
+
+            <div className="card pad">
+              <div className="row between">
+                <div><div className="eyebrow">{t("orgWhatsapp")}</div><div className="small">{t("orgWhatsappNote")}</div></div>
+                {!editWa && <button className="btn xs line" onClick={() => setEditWa(true)}>{org.whatsapp ? org.whatsapp : t("add")}</button>}
+              </div>
+              {editWa && <div className="row" style={{ marginTop: 8, gap: 8 }}><input value={wa} onChange={(e) => setWa(e.target.value)} placeholder="+961 3 000 000" style={{ flex: 1 }} /><button className="btn sm green" onClick={saveWa}>{t("save")}</button></div>}
             </div>
 
             <div className="grid2">
               <Link href="/org/promoters" className="btn line">{t("promoters")}{!hasPlan(org.plan, "pro") ? " · Pro" : ""}</Link>
               <Link href="/org/door" className="btn line">{t("doorScanner")}</Link>
+              <Link href="/org/codes" className="btn line">{t("promoCodes")}</Link>
+              <Link href="/org/insights" className="btn line">{t("insights")}{!hasPlan(org.plan, "pro") ? " · Pro" : ""}</Link>
+              <Link href="/org/refunds" className="btn line">{t("refunds")}{refunds ? ` · ${refunds}` : ""}</Link>
+              <Link href="/org/developers" className="btn line">{t("developers")}</Link>
               <Link href="/org/finance" className="btn green" style={{ gridColumn: "span 2" }}>{t("finance")}</Link>
             </div>
           </>

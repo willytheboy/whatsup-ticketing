@@ -8,6 +8,8 @@ export const TENANT = process.env.NEXT_PUBLIC_TENANT ?? "lb";
 export const APP_ROLE = process.env.NEXT_PUBLIC_APP_ROLE ?? "ticketing";
 export const BACKOFFICE_URL = process.env.NEXT_PUBLIC_BACKOFFICE_URL ?? "https://whatsup-backoffice-app.vercel.app";
 export const IG_HANDLE = "whatsuplebanon";
+/** The platform's WhatsApp number for the concierge hand-off and support (digits only, international). */
+export const SUPPORT_WA = process.env.NEXT_PUBLIC_SUPPORT_WA ?? "96170000000";
 export const SHORT_HOST = "wul.app";
 
 /** Tenant time zone used for every date/time shown to buyers and staff. */

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { setCity, useT } from "@/lib/lang";
 
 /** City scope pill in the band; opens the bottom sheet. Coming-soon countries show a placeholder, not an empty feed. */
-export default function CityPill({ city, cities, label }: { city: string; cities: { name: string; name_ar: string | null }[]; label: string }) {
+export default function CityPill({ city, cities, label, soon = [] }: { city: string; cities: { name: string; name_ar: string | null }[]; label: string; soon?: { name: string; name_ar: string | null }[] }) {
   const [open, setOpen] = useState(false);
   const t = useT();
   return (
@@ -21,10 +21,12 @@ export default function CityPill({ city, cities, label }: { city: string; cities
                 <span style={{ color: "var(--ink3)" }}>{city === c.name ? "✓" : ""}</span>
               </button>
             ))}
-            <div className="small" style={{ margin: "14px 0 2px", fontWeight: 600, color: "var(--ink2)" }}>UAE · {t("comingSoon")}</div>
-            <div className="cbtn" style={{ color: "var(--ink3)" }}><span>Dubai</span></div>
-            <div className="small" style={{ margin: "10px 0 2px", fontWeight: 600, color: "var(--ink2)" }}>Egypt · {t("comingSoon")}</div>
-            <div className="cbtn" style={{ color: "var(--ink3)" }}><span>Cairo</span></div>
+            {soon.map((c) => (
+              <div key={c.name}>
+                <div className="small" style={{ margin: "14px 0 2px", fontWeight: 600, color: "var(--ink2)" }}>{c.name_ar && document.documentElement.lang === "ar" ? c.name_ar : c.name} · {t("comingSoon")}</div>
+                <div className="cbtn" style={{ color: "var(--ink3)" }}><span>{t("soonNote")}</span></div>
+              </div>
+            ))}
           </div>
         </div>
       )}

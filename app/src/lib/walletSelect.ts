@@ -1,0 +1,2 @@
+/** Columns the wallet and the ticket page read for a ticket card. */
+export const WALLET_SELECT = "id,code,token,seat,state,created_at,valid_until,order_id,recipient,events(id,slug,title,title_ar,starts_at,ends_at,doors_at,kind,refund_policy,venues(name,name_ar,city,city_ar),organisers(whatsapp)),tiers(name,name_ar,kind,plan_months,note,face_price),orders(meta,total,payment_method,addons,refund_status)";

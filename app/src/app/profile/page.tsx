@@ -4,7 +4,7 @@ import Link from "next/link";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/components/Toast";
 import { sb } from "@/lib/supabase-browser";
-import { useLang, useT, setLang, setCity } from "@/lib/lang";
+import { useLang, useT, setLang, setCity, useCur, setCur } from "@/lib/lang";
 import { useRoles } from "@/lib/roles";
 import { BACKOFFICE_URL, FX_RATE, IG_HANDLE } from "@/lib/config";
 
@@ -19,6 +19,8 @@ export default function ProfilePage() {
   const [p, setP] = useState<Profile | null>(null);
   const [city, setCityState] = useState("");
   const [orgs, setOrgs] = useState<{ id: string; name: string; plan: string }[]>([]);
+  const cur = useCur();
+  const [confirmDel, setConfirmDel] = useState(false);
 
   useEffect(() => {
     setCityState(decodeURIComponent((document.cookie.match(/(?:^|; )city=([^;]*)/) ?? [])[1] ?? ""));
@@ -33,11 +35,22 @@ export default function ProfilePage() {
     });
   }, []);
 
-  const toggleWa = async () => {
+  const togglePref = async (key: string, def = true) => {
     if (!p || !roles.user) return;
-    const prefs = { ...(p.prefs ?? {}), wa_reminders: !(p.prefs?.wa_reminders ?? true) };
+    const prefs = { ...(p.prefs ?? {}), [key]: !(p.prefs?.[key] ?? def) };
     await sb().from("profiles").update({ prefs }).eq("id", roles.user.id);
     setP({ ...p, prefs });
+  };
+  const exportData = async () => {
+    const { data, error } = await sb().rpc("my_export");
+    if (error) return toast(error.message);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); a.download = `whatsup-export-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    toast(t("exported"));
+  };
+  const deleteAccount = async () => {
+    const { error } = await sb().rpc("delete_my_account");
+    if (error) return toast(error.message);
+    await sb().auth.signOut(); location.assign("/");
   };
   const shareCode = () => {
     const url = `${location.origin}/?ref=${p?.referral_code ?? ""}`;
@@ -80,9 +93,20 @@ export default function ProfilePage() {
           <h2 style={{ margin: "8px 0 4px" }}>{t("settings")}</h2>
           <button className="list-btn" onClick={() => setLang(lang === "en" ? "ar" : "en")}><span>{t("language")}</span><span className="v">{t("langName")}</span></button>
           <button className="list-btn" onClick={() => setCity(city ? "" : "Beirut")}><span>{t("city")}</span><span className="v">{city || t("allCities")}</span></button>
-          <button className="list-btn" onClick={() => toast(`USD ⇄ LBP ${FX_RATE.toLocaleString("en-US")}`)}><span>{t("currency")}</span><span className="v">USD · LBP {FX_RATE.toLocaleString("en-US")}</span></button>
-          {p && <button className="list-btn" onClick={toggleWa}><span>{t("waReminders")}</span><span className="v">{(p.prefs?.wa_reminders ?? true) ? t("on") : t("off")}</span></button>}
+          <button className="list-btn" onClick={() => setCur(cur === "USD" ? "LBP" : "USD")}><span>{t("currency")}</span><span className="v">{cur === "LBP" ? `LBP · ${FX_RATE.toLocaleString("en-US")}` : "USD"}</span></button>
+          {p && <button className="list-btn" onClick={() => togglePref("wa_tickets")}><span>{t("waTickets")}</span><span className="v">{(p.prefs?.wa_tickets ?? true) ? t("on") : t("off")}</span></button>}
+          {p && <button className="list-btn" onClick={() => togglePref("wa_reminders")}><span>{t("waReminders")}</span><span className="v">{(p.prefs?.wa_reminders ?? true) ? t("on") : t("off")}</span></button>}
+          {p && <button className="list-btn" onClick={() => togglePref("email_copies", false)}><span>{t("emailCopies")}</span><span className="v">{(p.prefs?.email_copies ?? false) ? t("on") : t("off")}</span></button>}
+          {p && <Link href="/saved" className="list-btn"><span>{t("savedListings")}</span><span className="v">›</span></Link>}
         </div>
+        {p && (
+          <div>
+            <h2 style={{ margin: "8px 0 4px" }}>{t("yourData")}</h2>
+            <button className="list-btn" onClick={exportData}><span>{t("exportData")}</span><span className="v">JSON</span></button>
+            {!confirmDel ? <button className="list-btn" onClick={() => setConfirmDel(true)}><span style={{ color: "var(--red-dark)" }}>{t("deleteAccount")}</span><span className="v">›</span></button>
+              : <div className="card pad stack"><div className="small">{t("deleteNote")}</div><div className="grid2"><button className="btn red sm" onClick={deleteAccount}>{t("deleteAccount")}</button><button className="btn line sm" onClick={() => setConfirmDel(false)}>{t("back")}</button></div></div>}
+          </div>
+        )}
         {(roles.isOrganiser || roles.isDoor || roles.isAdmin) && (
           <div>
             <h2 style={{ margin: "8px 0 4px" }}>{t("venue")}</h2>

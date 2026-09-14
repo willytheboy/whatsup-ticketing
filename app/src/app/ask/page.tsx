@@ -1,13 +1,16 @@
 "use client";
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import { I } from "@/components/Icons";
 import { useToast } from "@/components/Toast";
 import { useLang, useT } from "@/lib/lang";
+import { SUPPORT_WA, unitFee } from "@/lib/config";
+import type { Cart } from "../e/[slug]/OfferPicker";
 
-type Bubble = { who: "me" | "bot" | "think"; text: string; open?: { slug: string; title: string } | null };
+type CartHint = { slug: string; tier_id: string; name: string; qty: number; kind: string };
+type Bubble = { who: "me" | "bot" | "think"; text: string; open?: { slug: string; title: string } | null; cart?: CartHint | null };
 
 /** Ask (brief §5.8): the concierge. Opening line scoped to the city, quick chips, action chips after every answer. */
 function Ask() {
@@ -18,7 +21,9 @@ function Ask() {
   const [log, setLog] = useState<Bubble[]>([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
   const started = useRef(false);
+  const router = useRouter();
   const city = typeof document !== "undefined" ? decodeURIComponent((document.cookie.match(/(?:^|; )city=([^;]*)/) ?? [])[1] ?? "") : "";
 
   useEffect(() => {
@@ -38,14 +43,35 @@ function Ask() {
     setBusy(true);
     setLog((l) => [...l, { who: "me", text: msg }, { who: "think", text: "…" }]);
     try {
-      const r = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "concierge", q: msg, lang, city }) });
+      const history = log.filter((b) => b.who !== "think").slice(-6).map((b) => ({ who: b.who, text: b.text }));
+      const r = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "concierge", q: msg, lang, city, history }) });
       const d = await r.json();
-      setLog((l) => [...l.slice(0, -1), { who: "bot", text: d.text, open: d.open }]);
+      setLog((l) => [...l.slice(0, -1), { who: "bot", text: d.text, open: d.open, cart: d.cart }]);
     } catch {
       setLog((l) => [...l.slice(0, -1), { who: "bot", text: t("noResults") }]);
     }
     setBusy(false);
   };
+
+  const toCheckout = async (c: CartHint, title: string) => {
+    // build the cart the listing page would have built, then go straight to checkout
+    const r = await fetch(`/api/listing?slug=${encodeURIComponent(c.slug)}`).then((x) => x.json()).catch(() => null);
+    const tier = r?.tiers?.find((x: any) => x.id === c.tier_id);
+    if (!r || !tier) return router.push(`/e/${c.slug}`);
+    const face = Number(tier.face_price);
+    const cart: Cart = { listing: { id: r.id, slug: r.slug, title: r.title, kind: r.kind }, lines: [{ tier_id: tier.id, name: tier.name, kind: tier.kind, qty: c.qty, face, unit: face, fee: unitFee(tier.kind, face), covered: false, note: tier.note ?? null, plan_months: tier.plan_months ?? null }], table: null, gift: null, method: "card", checkin: null };
+    sessionStorage.setItem("wu-cart", JSON.stringify(cart));
+    router.push("/checkout");
+  };
+  const mic = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return toast(t("noMic"));
+    const rec = new SR(); rec.lang = lang === "ar" ? "ar-LB" : "en-GB"; rec.interimResults = false;
+    rec.onresult = (e: any) => { const s = e.results?.[0]?.[0]?.transcript; setListening(false); if (s) ask(s); };
+    rec.onerror = () => setListening(false); rec.onend = () => setListening(false);
+    setListening(true); rec.start();
+  };
+  const waLink = () => `https://wa.me/${SUPPORT_WA}?text=${encodeURIComponent(log.filter((b) => b.who === "me").map((b) => b.text).slice(-3).join("\n") || t("askPh"))}`;
 
   return (
     <>
@@ -61,15 +87,17 @@ function Ask() {
             )}
             {b.who === "bot" && i > 0 && (
               <div className="acts">
-                {b.open && <Link href={`/e/${b.open.slug}`} className="red">{t("open")}: {b.open.title}</Link>}
-                <button onClick={() => toast(t("waCont"))}>{t("onWa")}</button>
+                {b.cart && <button className="red" onClick={() => toCheckout(b.cart!, b.open?.title ?? "")}>🛒 {t("checkout")} · {b.cart.qty} × {b.cart.name}</button>}
+                {b.open && <Link href={`/e/${b.open.slug}`} className={b.cart ? "" : "red"}>{t("open")}: {b.open.title}</Link>}
+                <a href={waLink()} target="_blank" rel="noopener" onClick={() => toast(t("waCont"))}>{t("onWa")}</a>
               </div>
             )}
           </div>
         ))}
       </div>
       <div className="compose">
-        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} placeholder={t("askPh")} />
+        <button onClick={mic} aria-label={t("speak")} style={{ background: listening ? "var(--red)" : "var(--sand)", color: listening ? "#fff" : "var(--ink)" }}>🎤</button>
+        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} placeholder={listening ? t("listening") : t("askPh")} />
         <button onClick={() => ask(q)} aria-label={t("send")} disabled={busy}><span style={{ width: 20, height: 20, display: "block" }}><I.send /></span></button>
       </div>
     </>

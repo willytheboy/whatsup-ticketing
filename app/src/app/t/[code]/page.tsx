@@ -6,8 +6,8 @@ import { TicketCard, MemberCard, kindOf, type WalletTicket } from "@/components/
 import { useToast } from "@/components/Toast";
 import { sb } from "@/lib/supabase-browser";
 import { useT } from "@/lib/lang";
-
-const SELECT = "code,token,seat,state,created_at,valid_until,events(id,slug,title,title_ar,starts_at,kind,venues(name,name_ar,city,city_ar)),tiers(name,name_ar,kind,plan_months,note),orders(meta,total,payment_method)";
+import { WALLET_SELECT as SELECT } from "@/lib/walletSelect";
+import { ensureKeys } from "@/lib/wallet";
 
 /** One ticket, straight after checkout or from a shared link (the holder must be signed in). */
 function TicketInner({ params }: { params: { code: string } }) {
@@ -17,15 +17,20 @@ function TicketInner({ params }: { params: { code: string } }) {
   const [tk, setTk] = useState<WalletTicket | null>(null);
   const [name, setName] = useState("");
   const [state, setState] = useState<"loading" | "ok" | "none">("loading");
+  const [key, setKey] = useState<string | undefined>();
 
-  useEffect(() => {
-    (async () => {
+  const load = async () => {
       const { data } = await sb().from("tickets").select(SELECT).eq("code", params.code).maybeSingle();
       setTk(data as unknown as WalletTicket | null);
       setState(data ? "ok" : "none");
+      if (data?.state === "valid") ensureKeys([data.id]).then((k) => setKey(k[data.id]));
+  };
+  useEffect(() => {
+    (async () => {
+      await load();
       const { data: { user } } = await sb().auth.getUser();
       if (user) { const { data: p } = await sb().from("profiles").select("name").eq("id", user.id).maybeSingle(); setName(p?.name ?? user.email ?? ""); }
-      if (data && sp.get("new")) toast(data.state === "reserved" ? `${t("reserved")}. ${t("done")}` : t("done"));
+      if (sp.get("new")) toast(sp.get("reserved") ? `${t("reserved")}. ${t("done")}` : t("done"));
     })();
   }, [params.code]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -35,7 +40,7 @@ function TicketInner({ params }: { params: { code: string } }) {
       <main>
         {state === "loading" && <div className="empty">{t("loading")}</div>}
         {state === "none" && <div className="empty">{t("notFound")}</div>}
-        {tk && (kindOf(tk) === "pass" ? <MemberCard tk={tk} holder={name} /> : <TicketCard tk={tk} holder={name} />)}
+        {tk && (kindOf(tk) === "pass" ? <MemberCard tk={tk} holder={name} rotKey={key} /> : <TicketCard tk={tk} holder={name} rotKey={key} onChange={load} />)}
       </main>
     </>
   );

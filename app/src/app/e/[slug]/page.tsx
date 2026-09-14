@@ -18,7 +18,7 @@ export default async function ListingPage({ params }: { params: { slug: string }
   const lang = getLang();
   const t = (k: string) => T(lang, k);
   const db = sbServer();
-  const { data } = await db.from("events").select(`${LIST_SELECT},description,description_ar,organisers(id,name,name_ar,plan)`).eq("slug", params.slug).in("status", ["live", "sold_out", "ended"]).maybeSingle();
+  const { data } = await db.from("events").select(`${LIST_SELECT},description,description_ar,organisers(id,name,name_ar,plan,whatsapp)`).eq("slug", params.slug).in("status", ["live", "sold_out", "ended"]).maybeSingle();
   if (!data) notFound();
   const l = data as unknown as Listing;
   const title = pick(lang, l, "title");
@@ -42,10 +42,11 @@ export default async function ListingPage({ params }: { params: { slug: string }
           </div>
         </Photo>
         <Link href="/" className="icon start" aria-label={t("back")} style={{ position: "absolute" }}>‹</Link>
-        <ListingActions slug={l.slug} title={l.title} line={`${when} · ${l.venues?.name ?? ""}`} />
+        <ListingActions id={l.id} slug={l.slug} title={l.title} line={`${when} · ${l.venues?.name ?? ""}`} />
       </div>
       <main>
         {desc && <p style={{ fontSize: 14, lineHeight: 1.55, margin: 0, color: "var(--ink2)" }}>{desc}</p>}
+        {pick(lang, l, "pinned") && <div className="pin">📌 {pick(lang, l, "pinned")}</div>}
         {p !== null && (
           <div className="meter" style={{ marginTop: 0 }}>
             <span className="dot" style={{ background: meterTone(p) }} />
@@ -61,8 +62,8 @@ export default async function ListingPage({ params }: { params: { slug: string }
             <Link href={`/story/${l.slug}`} className="btn line">⤴ {t("shareIg")}</Link>
           )}
         </div>
-        {lat && lng ? <MapCard lat={lat} lng={lng} address={l.venues?.address ?? `${venue}, ${city}`} /> : null}
-        <OfferPicker listing={{ id: l.id, slug: l.slug, title, kind: l.kind, status: l.status, organiser: l.organisers?.name ?? "" }} tiers={[...l.tiers].sort((a, b) => a.sort - b.sort)} tables={(l.tables_vip ?? []).filter((x) => !x.reserved_by_order)} deals={l.deals ?? []} />
+        {lat && lng ? <MapCard lat={lat} lng={lng} address={pick(lang, l.venues, "address") || `${venue}, ${city}`} /> : null}
+        <OfferPicker listing={{ id: l.id, slug: l.slug, title, kind: l.kind, status: l.status, organiser: l.organisers?.name ?? "", organiserWa: (l.organisers as any)?.whatsapp ?? null }} tiers={[...l.tiers].sort((a, b) => a.sort - b.sort)} tables={(l.tables_vip ?? []).filter((x) => !x.reserved_by_order)} deals={l.deals ?? []} />
       </main>
     </>
   );

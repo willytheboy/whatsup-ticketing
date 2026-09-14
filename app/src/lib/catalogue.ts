@@ -6,9 +6,9 @@ export type Tier = {
   id: string; name: string; name_ar: string | null; face_price: number; capacity: number; sold: number; held: number;
   kind: OfferKind; member_free: boolean; plan_months: number | null; per_order_limit: number; note: string | null; sort: number;
 };
-export type Table = { id: string; name: string; name_ar: string | null; seats: number; min_spend: number; deposit: number; reserved_by_order: string | null };
+export type Table = { id: string; name: string; name_ar: string | null; seats: number; min_spend: number; deposit: number; reserved_by_order: string | null; packages?: { id: string; name: string; name_ar?: string; price: number; desc?: string }[] };
 export type Deal = { id: string; name: string; name_ar?: string; member_only?: boolean };
-export type Venue = { id?: string; name: string; name_ar: string | null; city: string; city_ar: string | null; address?: string | null; lat?: number | null; lng?: number | null };
+export type Venue = { id?: string; name: string; name_ar: string | null; city: string; city_ar: string | null; address?: string | null; address_ar?: string | null; lat?: number | null; lng?: number | null };
 export type Listing = {
   id: string; slug: string; title: string; title_ar: string | null; description?: string | null; description_ar?: string | null;
   category: string; kind: "event" | "venue" | "stay" | "pass"; starts_at: string; ends_at?: string | null; doors_at?: string | null; status: string;
@@ -18,7 +18,7 @@ export type Listing = {
 };
 
 export const LIST_SELECT =
-  "id,slug,title,title_ar,category,kind,starts_at,ends_at,doors_at,status,featured_until,cover_url,deals,pinned,pinned_ar,venues(id,name,name_ar,city,city_ar,address,lat,lng),tiers(id,name,name_ar,face_price,capacity,sold,held,kind,member_free,plan_months,per_order_limit,note,sort),tables_vip(id,name,name_ar,seats,min_spend,deposit,reserved_by_order)";
+  "id,slug,title,title_ar,category,kind,starts_at,ends_at,doors_at,status,featured_until,cover_url,deals,pinned,pinned_ar,venues(id,name,name_ar,city,city_ar,address,address_ar,lat,lng),tiers(id,name,name_ar,face_price,capacity,sold,held,kind,member_free,plan_months,per_order_limit,note,sort),tables_vip(id,name,name_ar,seats,min_spend,deposit,reserved_by_order,packages)";
 
 export const isFeatured = (l: Listing, now = new Date()) => !!l.featured_until && new Date(l.featured_until) > now;
 export const left = (x: Tier) => Math.max(0, x.capacity - x.sold - x.held);

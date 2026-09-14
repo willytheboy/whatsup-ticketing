@@ -29,3 +29,14 @@ export function pick<T extends Record<string, any>>(lang: Lang, row: T | null | 
   if (!row) return "";
   return (lang === "ar" && row[`${key}_ar`]) || row[key] || "";
 }
+
+/** Display currency (cookie "cur": USD or LBP). Prices stay USD-native; LBP is shown beside them when chosen. */
+export function useCur(): "USD" | "LBP" {
+  const [cur, set] = useState<"USD" | "LBP">("USD");
+  useEffect(() => { set(/(?:^|; )cur=LBP/.test(document.cookie) ? "LBP" : "USD"); }, []);
+  return cur;
+}
+export function setCur(cur: "USD" | "LBP") {
+  document.cookie = `cur=${cur};path=/;max-age=31536000;samesite=lax`;
+  location.reload();
+}

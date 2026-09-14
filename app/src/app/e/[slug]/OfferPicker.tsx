@@ -5,26 +5,29 @@ import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { sb } from "@/lib/supabase-browser";
 import { useToast } from "@/components/Toast";
-import { allInKind, unitFee, money, type OfferKind } from "@/lib/config";
-import { useLang, useT } from "@/lib/lang";
+import { allInKind, unitFee, money, lbp, type OfferKind } from "@/lib/config";
+import { useLang, useT, useCur } from "@/lib/lang";
 import { left as leftOf, type Tier, type Table, type Deal } from "@/lib/catalogue";
+import CalendarSheet from "@/components/CalendarSheet";
 
 export type CartLine = { tier_id: string; name: string; kind: OfferKind; qty: number; face: number; unit: number; fee: number; covered: boolean; note: string | null; plan_months: number | null };
 export type Cart = {
   listing: { id: string; slug: string; title: string; kind: string };
   lines: CartLine[];
-  table: { id: string; name: string; deposit: number; party: number | null; time: string | null } | null;
+  table: { id: string; name: string; deposit: number; party: number | null; time: string | null; package?: { id: string; name: string; price: number } | null } | null;
   gift: { name: string; phone: string } | null;
   method: "card" | "cash_door" | null;
   checkin: string | null;
+  squad_id?: string | null;
 };
 const SLOTS = ["19:00", "19:30", "20:00", "20:30", "21:00", "21:30", "22:00"];
 const nextFriday = () => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7)); return d.toISOString().slice(0, 10); };
 
 /** Offer pickers by type (brief §5.4). Pickers change shape by type; nothing else does. The cart lives in sessionStorage until checkout. */
-export default function OfferPicker({ listing, tiers, tables, deals }: { listing: Cart["listing"] & { status: string; organiser: string }; tiers: Tier[]; tables: Table[]; deals: Deal[] }) {
+export default function OfferPicker({ listing, tiers, tables, deals }: { listing: Cart["listing"] & { status: string; organiser: string; organiserWa?: string | null }; tiers: Tier[]; tables: Table[]; deals: Deal[] }) {
   const t = useT();
   const lang = useLang();
+  const cur = useCur();
   const toast = useToast();
   const router = useRouter();
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -33,7 +36,9 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
   const [tableId, setTableId] = useState<string | null>(null);
   const [party, setParty] = useState<number | null>(null);
   const [time, setTime] = useState<string | null>(null);
+  const [pkg, setPkg] = useState<string | null>(null);
   const [checkin, setCheckin] = useState(nextFriday());
+  const [cal, setCal] = useState(false);
   const [gift, setGift] = useState<{ on: boolean; name: string; phone: string }>({ on: false, name: "", phone: "" });
   const [user, setUser] = useState<User | null>(null);
   const [hasPass, setHasPass] = useState(false);
@@ -82,7 +87,8 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
   }, [qty, plan, hasPass, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const count = lines.reduce((a, l) => a + (l.kind === "stay" ? 1 : l.qty), 0);
-  const total = lines.reduce((a, l) => a + (l.unit + l.fee) * l.qty, 0) + (table ? Number(table.deposit) : 0);
+  const pkgRow = table && pkg ? (table.packages ?? []).find((p) => p.id === pkg) ?? null : null;
+  const total = lines.reduce((a, l) => a + (l.unit + l.fee) * l.qty, 0) + (table ? Number(table.deposit) + Number(pkgRow?.price ?? 0) : 0);
   const tableReady = !!table && (!table.seats || !!party) && !!time;
   const canBook = lines.length > 0 || tableReady;
   const giftable = lines.some((l) => ["ticket", "daypass", "item"].includes(l.kind));
@@ -109,7 +115,7 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
   const checkout = (method: Cart["method"]) => {
     const cart: Cart = {
       listing: { id: listing.id, slug: listing.slug, title: listing.title, kind: listing.kind },
-      lines, table: table ? { id: table.id, name: name(table), deposit: Number(table.deposit), party, time } : null,
+      lines, table: table ? { id: table.id, name: name(table), deposit: Number(table.deposit), party, time, package: pkgRow ? { id: pkgRow.id, name: name(pkgRow as any), price: Number(pkgRow.price) } : null } : null,
       gift: gift.on && gift.name ? { name: gift.name, phone: gift.phone } : null, method, checkin: lines.some((l) => l.kind === "stay") ? checkin : null,
     };
     sessionStorage.setItem("wu-cart", JSON.stringify(cart));
@@ -117,6 +123,17 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
   };
   const sel = (x: Tier) => !!qty[x.id];
   const ended = listing.status === "ended";
+  const groupWa = (x: Tier) => {
+    const to = (listing.organiserWa ?? "").replace(/\D/g, "");
+    const text = encodeURIComponent(`${t("groupBooking")} · ${listing.title} · ${name(x)} · ${(qty[x.id] ?? 0) + 1}+ · ${typeof location !== "undefined" ? location.origin : ""}/e/${listing.slug}`);
+    return to ? `https://wa.me/${to}?text=${text}` : `https://wa.me/?text=${text}`;
+  };
+  const split = async () => {
+    if (!user) return router.push(`/login?next=/e/${listing.slug}`);
+    const l = lines.find((x) => ["ticket", "daypass", "item"].includes(x.kind));
+    if (!l) return toast(t("splitOnlyTickets"));
+    router.push(`/squad/new?event=${listing.id}&tier=${l.tier_id}`);
+  };
 
   const renderTier = (x: Tier) => {
         const left = leftOf(x);
@@ -131,7 +148,7 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="title" style={{ fontSize: 15 }}>{name(x)}</div>
                 <div className="meta">
-                  {Number(x.face_price) === 0 ? t("free") : covered ? <><s>{money(Number(x.face_price))}</s> {t("youAreMember")}</> : `${money(allInKind(x.kind, Number(x.face_price)))} ${unitLabel}`}
+                  {Number(x.face_price) === 0 ? t("free") : covered ? <><s>{money(Number(x.face_price))}</s> {t("youAreMember")}</> : `${money(allInKind(x.kind, Number(x.face_price)))}${cur === "LBP" ? ` ≈ ${lbp(allInKind(x.kind, Number(x.face_price)))}` : ""} ${unitLabel}`}
                   {!covered && Number(x.face_price) > 0 && x.kind !== "stay" ? <span className="small"> {t("allIn")}</span> : null}
                   {left < 50 && x.capacity < 5000 && <> · <span style={{ color: soldOut ? "var(--red-dark)" : "var(--ink2)" }}>{soldOut ? t("soldOut") : `${left} ${t(x.kind === "stay" ? "rooms" : "left")}`}</span></>}
                   {x.member_free && !covered && <> · <span style={{ color: "var(--g1)" }}>{t("membersFree")}</span></>}
@@ -140,16 +157,15 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
                 {!soldOut && x.kind !== "stay" && <div className="small" style={{ marginTop: 4 }}>{t("maxPer")}: {x.per_order_limit || 6}</div>}
                 {x.kind === "stay" && (
                   <div className="row start" style={{ marginTop: 8, gap: 8, flexWrap: "wrap" }}>
-                    <span className="small">{t("checkIn")}</span>
-                    <input type="date" value={checkin} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setCheckin(e.target.value)} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "5px 8px", fontSize: 13 }} />
-                    <span className="small">{q ? `${q} ${t("nights")}` : ""}</span>
+                    <button className="btn xs line" onClick={() => setCal(true)}>📅 {checkin}{q ? ` → ${q} ${t("nights")}` : ` · ${t("pickDates")}`}</button>
+                    {cal && <CalendarSheet checkin={checkin} nights={q} onChange={(c, n) => { setCheckin(c); setQty((s) => ({ ...s, [x.id]: Math.min(n, Math.max(1, Math.min(x.per_order_limit || 14, leftOf(x)))) })); }} onClose={() => setCal(false)} />}
                   </div>
                 )}
                 {group[x.id] && (
                   <div className="gift" style={{ background: "var(--sand)", borderColor: "var(--sand)" }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{t("groupBooking")}</div>
                     <div className="meta">{t("groupNote")}</div>
-                    <button className="btn green sm" style={{ marginTop: 8 }} onClick={() => { toast(t("groupSent")); setGroup((g) => ({ ...g, [x.id]: false })); }}>{t("groupBooking")} · WhatsApp</button>
+                    <a className="btn green sm" style={{ marginTop: 8 }} href={groupWa(x)} target="_blank" rel="noopener" onClick={() => { toast(t("groupSent")); setGroup((g) => ({ ...g, [x.id]: false })); }}>{t("groupBooking")} · WhatsApp</a>
                   </div>
                 )}
               </div>
@@ -193,7 +209,7 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
         const sizes = Array.from({ length: Math.max(1, x.seats - 1) }, (_, i) => i + 2).filter((n) => n <= x.seats);
         return (
           <div key={x.id} className={`offer ${on ? "sel" : ""}`}>
-            <button className="row" style={{ width: "100%", alignItems: "flex-start" }} onClick={() => { setTableId(on ? null : x.id); setParty(null); setTime(null); }}>
+            <button className="row" style={{ width: "100%", alignItems: "flex-start" }} onClick={() => { setTableId(on ? null : x.id); setParty(null); setTime(null); setPkg(null); }}>
               <div style={{ flex: 1 }}>
                 <div className="title" style={{ fontSize: 15 }}>{name(x)}</div>
                 <div className="meta">
@@ -209,6 +225,12 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
                 <div className="slots">{sizes.map((n) => <button key={n} className={`slot ${party === n ? "on" : ""}`} onClick={() => setParty(party === n ? null : n)}>{n}</button>)}</div>
                 <div className="small" style={{ marginTop: 8 }}>{t("time")}</div>
                 <div className="slots">{SLOTS.map((s) => <button key={s} className={`slot ${time === s ? "on" : ""}`} onClick={() => setTime(time === s ? null : s)}>{s}</button>)}</div>
+                {(x.packages ?? []).length > 0 && (
+                  <>
+                    <div className="small" style={{ marginTop: 8 }}>{t("packages")}</div>
+                    <div className="slots">{(x.packages ?? []).map((p) => <button key={p.id} className={`slot ${pkg === p.id ? "on" : ""}`} onClick={() => setPkg(pkg === p.id ? null : p.id)}>{name(p as any)} · {money(Number(p.price))}</button>)}</div>
+                  </>
+                )}
                 {Number(x.deposit) > 0 && party && <div className="small" style={{ marginTop: 6, color: "var(--g1)" }}>{t("hold")} {money(Number(x.deposit))}. {t("holdNote")}</div>}
               </>
             )}
@@ -248,14 +270,14 @@ export default function OfferPicker({ listing, tiers, tables, deals }: { listing
       {canBook && (
         <>
           <p className="small" style={{ margin: "12px 0 10px" }}>
-            {t("total")} {money(total)}{total ? ` ${t("allIn")}` : ""}. {t("feesNote")}{ref ? <span style={{ color: "var(--g1)" }}> {t("refApplied")} {ref}.</span> : null}
+            {t("total")} {money(total)}{total && cur === "LBP" ? ` ≈ ${lbp(total)}` : ""}{total ? ` ${t("allIn")}` : ""}. {t("feesNote")}{ref ? <span style={{ color: "var(--g1)" }}> {t("refApplied")} {ref}.</span> : null}
           </p>
           <div className="grid2">
             {total > 0 ? (
               <>
                 <button className="btn red" onClick={() => checkout("card")}>{t("payCard")}</button>
                 <button className="btn line" onClick={() => checkout("cash_door")}>{t("payCash")}</button>
-                {count > 1 && <button className="btn line" style={{ gridColumn: "span 2" }} onClick={() => toast(t("splitSent"))}>➗ {t("splitPay")} · {count}</button>}
+                {count > 1 && <button className="btn line" style={{ gridColumn: "span 2" }} onClick={split}>👥 {t("splitPay")} · {count}</button>}
               </>
             ) : (
               <button className="btn red" style={{ gridColumn: "span 2" }} onClick={() => checkout("card")}>{table ? t("confirm") : t("reserve")}</button>
