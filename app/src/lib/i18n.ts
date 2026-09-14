@@ -234,6 +234,14 @@ const D: Record<string, [string, string]> = {
   soonNote: ["We're coming. Follow @whatsuplebanon for the date.", "جايين. تابع @whatsuplebanon للتاريخ."],
   waTickets: ["Tickets on WhatsApp", "التذاكر على واتساب"], emailCopies: ["Email copies", "نسخ بالإيميل"], yourData: ["Your data", "بياناتك"], exportData: ["Export my data", "صدّر بياناتي"], exported: ["Export downloaded", "انزّل التصدير"],
   deleteAccount: ["Delete my account", "احذف حسابي"], deleteNote: ["This removes your profile, messages and saved items. Tickets already used stay in the venue's records without your name.", "هيدا بيشيل حسابك ورسائلك ومحفوظاتك. التذاكر المستعملة بتضل بسجلات المكان بلا اسمك."],
+  // v0.6 · upgrade ladder v2
+  leaderboard: ["Leaderboard", "الترتيب"], tiersNote: ["Bronze under 10 sales · Silver from 10 · Gold from 50. Tiers refresh nightly.", "برونز تحت ١٠ مبيعات · فضة من ١٠ · ذهب من ٥٠. بيتجدد كل ليلة."],
+  shareKit: ["Share kit", "عدّة المشاركة"], kitLine: ["Tickets with my link — 10% off:", "تذاكر برابطي — خصم ١٠٪:"], commission: ["commission", "عمولة"],
+  tipVenue: ["Tip the venue", "ادعم المكان"], subscribe: ["Monthly listener", "مستمع شهري"], subscribed: ["You're a monthly listener — 30 days of every stream", "صرت مستمع شهري — ٣٠ يوم لكل بث"],
+  tipped: ["Tipped", "دعمت"], tippedMsg: ["tipped the venue", "دعم المكان"], requestPh: ["Request a track", "اطلب أغنية"], requestMsg: ["Request", "طلب"], requested2: ["Request sent to the room", "انبعت الطلب للغرفة"],
+  supportNote: ["Tips go 90% to the venue; subscriptions 70%. Card in sandbox settles instantly.", "٩٠٪ من الدعم للمكان؛ ٧٠٪ من الاشتراكات. البطاقة التجريبية بتتسوّى فوراً."],
+  // v0.6 · intelligence
+  copilot: ["Venue copilot", "مساعد المكان"], copilotQ1: ["What should I do this week?", "شو أعمل هالأسبوع؟"], copilotPh: ["Ask about your sales, a listing, a promoter…", "اسأل عن مبيعاتك، إعلان، مروّج…"],
 };
 
 export const t = (lang: Lang, key: string) => (D[key] ? D[key][lang === "ar" ? 1 : 0] : key);

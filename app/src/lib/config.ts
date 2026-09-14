@@ -43,11 +43,15 @@ export const allIn = (face: number) => allInKind("ticket", face);
 export const organiserNet = (face: number, orgPct = ORGANISER_FEE_PCT) => (face <= 0 ? 0 : r2(face * (1 - orgPct - PROCESSING_PCT)));
 export const money = (usd: number) => (usd === 0 ? "Free" : "$" + usd.toFixed(2).replace(/\.00$/, ""));
 export const lbp = (usd: number) => "LBP " + (Math.round((FX_RATE * usd) / 1000) * 1000).toLocaleString("en-US");
-export const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: TZ });
-export const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
-export const fmtDateTime = (iso: string) =>
-  new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: TZ });
+/** Dates and times in the tenant zone; Arabic gets Levantine month names and Eastern Arabic numerals (brief §10). */
+const LOC = (lang?: string) => (lang === "ar" ? "ar-LB" : "en-GB");
+export const fmtDate = (iso: string, lang?: string) =>
+  new Date(iso).toLocaleDateString(LOC(lang), { weekday: "short", day: "numeric", month: "short", timeZone: TZ });
+export const fmtTime = (iso: string, lang?: string) => new Date(iso).toLocaleTimeString(LOC(lang), { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+export const fmtDateTime = (iso: string, lang?: string) =>
+  new Date(iso).toLocaleString(LOC(lang), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: TZ });
+/** Eastern Arabic numerals for counts shown in Arabic UI. */
+export const num = (n: number | string, lang?: string) => (lang === "ar" ? String(n).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]) : String(n));
 /** Signed money for ledgers: −$12.50 */
 export const signed = (n: number | string | null | undefined) => {
   const v = Number(n ?? 0);

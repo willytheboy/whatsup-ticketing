@@ -26,7 +26,7 @@ export default async function ListingPage({ params }: { params: { slug: string }
   const city = pick(lang, l.venues, "city");
   const desc = pick(lang, l, "description");
   const p = fill(l);
-  const when = l.kind === "event" ? `${fmtDate(l.starts_at)}, ${fmtTime(l.starts_at)}` : t(l.kind === "stay" ? "stayLine" : l.kind === "pass" ? "passLine" : "openDaily");
+  const when = l.kind === "event" ? `${fmtDate(l.starts_at, lang)}, ${fmtTime(l.starts_at, lang)}` : t(l.kind === "stay" ? "stayLine" : l.kind === "pass" ? "passLine" : "openDaily");
   const { data: stream } = l.venues?.id ? await db.from("v_streams").select("slug,status,title").eq("venue_id", l.venues.id).order("status").limit(1).maybeSingle() : { data: null };
   const lat = l.venues?.lat, lng = l.venues?.lng;
 

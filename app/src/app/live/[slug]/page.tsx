@@ -12,7 +12,7 @@ import { useLang, useT } from "@/lib/lang";
 
 type Stream = {
   id: string; slug: string; title: string; title_ar: string | null; kind: string; source: string; status: string; access: string;
-  pass_price: number; playback_url: string | null; description: string | null; listeners: number;
+  pass_price: number; sub_price?: number; playback_url: string | null; description: string | null; listeners: number;
   venues: { id: string; name: string; name_ar: string | null; city: string } | null;
   events: { title: string; slug: string } | null;
 };
@@ -29,6 +29,9 @@ export default function StreamPage({ params }: { params: { slug: string } }) {
   const [listing, setListing] = useState<{ slug: string; title: string; title_ar: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [tipOpen, setTipOpen] = useState(false);
+  const [request, setRequest] = useState("");
+  const [thanks, setThanks] = useState("");
 
   const load = async () => {
     const { data } = await sb().from("v_streams").select("*, venues(id,name,name_ar,city), events(title,slug)").eq("slug", params.slug).maybeSingle();
@@ -64,6 +67,27 @@ export default function StreamPage({ params }: { params: { slug: string } }) {
     if (error) return setErr(error.message);
     load();
   };
+  const subscribe = async () => {
+    setBusy(true); setErr("");
+    const { error } = await sb().rpc("buy_stream_subscription", { p_stream: s.id, p_method: "card" });
+    setBusy(false);
+    if (error) return setErr(error.message);
+    setThanks(t("subscribed")); load();
+  };
+  const tip = async (amount: number) => {
+    if (!user) return;
+    setBusy(true);
+    const { error } = await sb().rpc("tip_stream", { p_stream: s.id, p_amount: amount, p_method: "card" });
+    setBusy(false); setTipOpen(false);
+    if (error) return setErr(error.message);
+    setThanks(`${t("tipped")} ${money(amount)} 💚`);
+    if (room) await sb().from("chat_messages").insert({ room_id: room, user_id: user.id, body: `💚 ${t("tippedMsg")} ${money(amount)}` });
+  };
+  const sendRequest = async () => {
+    if (!user || !room || !request.trim()) return;
+    await sb().from("chat_messages").insert({ room_id: room, user_id: user.id, body: `🎵 ${t("requestMsg")}: ${request.trim()}` });
+    setRequest(""); setThanks(t("requested2"));
+  };
 
   return (
     <>
@@ -92,6 +116,18 @@ export default function StreamPage({ params }: { params: { slug: string } }) {
           </div>
         )}
         {canAccess && (s.status !== "live" ? <div className="card pad"><div className="small">{t("streamOffline")}</div></div> : <Player s={s} />)}
+        {canAccess && user && (
+          <div className="card pad stack">
+            <div className="grid2">
+              <button className="btn line sm" onClick={() => setTipOpen((v) => !v)}>💚 {t("tipVenue")}</button>
+              <button className="btn line sm" onClick={subscribe} disabled={busy}>{t("subscribe")} · {money(Number(s.sub_price ?? 5))}{t("perMo")}</button>
+            </div>
+            {tipOpen && <div className="slots">{[2, 5, 10, 20].map((n) => <button key={n} className="slot" disabled={busy} onClick={() => tip(n)}>${n}</button>)}</div>}
+            {room && <div className="row" style={{ gap: 8 }}><input value={request} onChange={(e) => setRequest(e.target.value)} placeholder={t("requestPh")} style={{ flex: 1 }} onKeyDown={(e) => e.key === "Enter" && sendRequest()} /><button className="btn sm green" onClick={sendRequest}>{t("send")}</button></div>}
+            {thanks && <div className="tag ok" style={{ alignSelf: "flex-start" }}>{thanks}</div>}
+            <div className="small">{t("supportNote")}</div>
+          </div>
+        )}
         {listing && <Link href={`/e/${listing.slug}`} className="btn red full">{t("ticketsFor")} {lang === "ar" && listing.title_ar ? listing.title_ar : listing.title}</Link>}
         {canAccess && room && (
           <div className="card pad">

@@ -34,6 +34,9 @@ export default function OrganiserHub() {
   const [wa, setWa] = useState<string>("");
   const [editWa, setEditWa] = useState(false);
   const [streamUrl, setStreamUrl] = useState<Record<string, string>>({});
+  const [cq, setCq] = useState("");
+  const [copilot, setCopilot] = useState<string>("");
+  const [thinking, setThinking] = useState(false);
 
   const load = async () => {
     if (!org) return;
@@ -94,6 +97,13 @@ export default function OrganiserHub() {
   const top = [...(stats ?? [])].sort((a, b) => Number(b.gross) - Number(a.gross)).slice(0, 3);
   const clicks = promoters.reduce((a, p) => a + Number(p.clicks), 0), psales = promoters.reduce((a, p) => a + Number(p.sales), 0);
   const nudges = org ? nudgesFor({ events, tiers, stats: stats ?? [], refunds, waits, plan: org.plan, whatsapp: org.whatsapp ?? null, lang }) : [];
+  const askCopilot = async (question?: string) => {
+    setThinking(true);
+    const slow = events.filter((e) => e.status === "live").map((e) => ({ e, f: forecast(e, tiers) })).filter((x) => x.f && x.f.pct < 40 && x.f.daysLeft <= 10).map((x) => x.e.title);
+    const facts = { sold: sum("sold"), gross: Math.round(gross), checked_in: sum("checked_in"), week: week.map((w) => ({ day: w.day, gross: w.gross })), slow, waiting: Object.values(waits).reduce((a, n) => a + n, 0), refunds, plan: org?.plan, listings: events.map((e) => ({ title: e.title, status: e.status, starts_at: e.starts_at, forecast: forecast(e, tiers)?.pct ?? null })), promoters: { clicks, sales: psales } };
+    const r = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "copilot", q: question ?? cq, lang, facts }) }).then((x) => x.json()).catch(() => null);
+    setCopilot(r?.text ?? t("noResults")); setThinking(false);
+  };
 
   return (
     <>
@@ -137,6 +147,13 @@ export default function OrganiserHub() {
                 ))}
               </div>
             )}
+
+            {/* venue copilot */}
+            <div className="card pad stack" style={{ gap: 8 }}>
+              <div className="row between"><span className="eyebrow">✨ {t("copilot")}</span>{!copilot && <button className="btn xs line" onClick={() => askCopilot(t("copilotQ1"))} disabled={thinking}>{t("copilotQ1")}</button>}</div>
+              {copilot && <div style={{ fontSize: 14, lineHeight: 1.5 }}>{copilot}</div>}
+              <div className="row" style={{ gap: 8 }}><input value={cq} onChange={(e) => setCq(e.target.value)} onKeyDown={(e) => e.key === "Enter" && askCopilot()} placeholder={t("copilotPh")} style={{ flex: 1 }} /><button className="btn sm green" onClick={() => askCopilot()} disabled={thinking || !cq.trim()}>{thinking ? "…" : t("askConcierge").split(" ")[0]}</button></div>
+            </div>
 
             {/* the upgrade ladder */}
             <div className={`planbox ${org.plan === "pro" ? "pro" : org.plan === "venue" ? "venue" : ""}`}>

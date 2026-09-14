@@ -17,7 +17,11 @@ const NAV: [string, string, string][] = [
   ["/admin/rules", "Rev-share", "%"],
   ["/admin/reports", "Reports", "▥"],
   ["/admin/streams", "Streams", "♫"],
+  ["/admin/promotions", "Promotions", "★"],
+  ["/admin/moments", "Moments", "▧"],
   ["/admin/team", "Team", "☺"],
+  ["/admin/tenants", "Tenants", "⊕"],
+  ["/admin/errors", "Errors", "⚠"],
   ["/admin/audit", "Audit", "⌕"],
 ];
 

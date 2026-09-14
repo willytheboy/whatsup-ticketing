@@ -23,7 +23,7 @@ export default function StoryPage({ params }: { params: { slug: string } }) {
 
   const title = lang === "ar" && l.title_ar ? l.title_ar : l.title;
   const venue = (lang === "ar" && l.venues?.name_ar) || l.venues?.name || "";
-  const when = l.kind === "event" ? fmtDate(l.starts_at) : venue ? l.venues?.city ?? "" : "";
+  const when = l.kind === "event" ? fmtDate(l.starts_at, lang) : venue ? l.venues?.city ?? "" : "";
   const link = `${SHORT_HOST}/${l.slug}${ref ? `?ref=${ref}` : ""}`;
   const words = title.split(" ");
 

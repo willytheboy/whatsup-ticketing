@@ -16,6 +16,13 @@ export default function Settlements() {
   const [pay, setPay] = useState<any | null>(null);
   const [ref, setRef] = useState("");
   const [method, setMethod] = useState("");
+  const [draft, setDraft] = useState<{ s: any; text: string } | null>(null);
+  const drafting = async (s: any) => {
+    setDraft({ s, text: "…" });
+    const st = s.statement ?? {};
+    const r = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "statement", partner: { name: s.partners?.name, period: `${fmtDate(s.period_start)} → ${fmtDate(s.period_end)}`, gross: st.gross ?? st.face_total ?? 0, fees: st.fees ?? st.platform_fees ?? 0, cash: st.cash_held ?? st.cash ?? 0, balance: Number(s.amount) } }) }).then((x) => x.json()).catch(() => null);
+    setDraft({ s, text: r?.text ?? "Could not draft." });
+  };
 
   const load = async () => {
     if (!admin.tenant) return;
@@ -78,7 +85,7 @@ export default function Settlements() {
                     <td className="r"><b><Amount v={s.amount} /></b></td>
                     <td>{s.invoice_id ? <Link href={`/admin/invoices/${s.invoice_id}`}>invoice</Link> : "—"}</td>
                     <td className="mono">{s.reference ?? ""}</td>
-                    <td>{s.status !== "paid" && <button className="btn green xs" onClick={() => { setPay(s); setMethod(s.method ?? s.partners?.payout_method ?? ""); }}>{Number(s.amount) >= 0 ? "Mark paid" : "Mark received"}</button>}</td>
+                    <td><div className="row" style={{ gap: 6 }}><button className="btn ghost xs" onClick={() => drafting(s)}>Draft WhatsApp</button>{s.status !== "paid" && <button className="btn green xs" onClick={() => { setPay(s); setMethod(s.method ?? s.partners?.payout_method ?? ""); }}>{Number(s.amount) >= 0 ? "Mark paid" : "Mark received"}</button>}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -86,6 +93,15 @@ export default function Settlements() {
           </div>
         )}
       </Panel>
+      {draft && (
+        <Modal title={`Statement message · ${draft.s.partners?.name}`} onClose={() => setDraft(null)}>
+          <textarea value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} rows={7} style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 10, padding: 10, fontSize: 14 }} />
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn ghost sm" onClick={() => { navigator.clipboard?.writeText(draft.text); }}>Copy</button>
+            <a className="btn green sm" href={`https://wa.me/?text=${encodeURIComponent(draft.text)}`} target="_blank" rel="noopener">Open in WhatsApp</a>
+          </div>
+        </Modal>
+      )}
       {pay && (
         <Modal title={`${Number(pay.amount) >= 0 ? "Pay" : "Receive"} ${pay.partners?.name}`} onClose={() => setPay(null)}>
           <div className="dim">{fmtDate(pay.period_start)} → {fmtDate(pay.period_end)} · <Amount v={pay.amount} /></div>

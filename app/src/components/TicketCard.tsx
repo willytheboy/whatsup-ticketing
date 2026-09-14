@@ -21,7 +21,7 @@ export const isPast = (tk: WalletTicket) => { const e = tk.events; if (!e) retur
 
 function shareText(tk: WalletTicket, lang: string) {
   const e = tk.events;
-  return `🎟 ${pick(lang, e, "title")}\n📅 ${e ? fmtDate(e.starts_at) : ""} ${e && e.kind === "event" ? fmtTime(e.starts_at) : ""}\n📍 ${pick(lang, e?.venues, "name")}, ${pick(lang, e?.venues, "city")}\n${pick(lang, tk.tiers, "name")}${tk.seat ? ` · ${tk.seat}` : ""}\n${tk.code}\n${typeof location !== "undefined" ? location.origin : ""}/t/${tk.code}`;
+  return `🎟 ${pick(lang, e, "title")}\n📅 ${e ? fmtDate(e.starts_at, lang) : ""} ${e && e.kind === "event" ? fmtTime(e.starts_at, lang) : ""}\n📍 ${pick(lang, e?.venues, "name")}, ${pick(lang, e?.venues, "city")}\n${pick(lang, tk.tiers, "name")}${tk.seat ? ` · ${tk.seat}` : ""}\n${tk.code}\n${typeof location !== "undefined" ? location.origin : ""}/t/${tk.code}`;
 }
 
 /** Live QR: a rotating WU2 token when the ticket's key is known (refreshes every 2 minutes), the static WU1 token otherwise. */
@@ -91,7 +91,7 @@ export function TicketCard({ tk, holder, compact, rotKey, onChange }: { tk: Wall
   const calendar = () => e && download(`${tk.code}.ics`, new Blob([icsFor({ title: pick(lang, e, "title"), start: e.doors_at ?? e.starts_at, end: e.kind === "event" ? null : e.ends_at, location: `${pick(lang, e.venues, "name")}, ${pick(lang, e.venues, "city")}`, url: `${location.origin}/t/${tk.code}`, code: tk.code })], { type: "text/calendar" }));
   const saveImage = async () => {
     const canvas = qrCanvas.current?.querySelector("canvas") ?? null;
-    const blob = await ticketImage({ title: pick(lang, e, "title"), line1: e ? `${fmtDate(e.starts_at)}${e.kind === "event" ? `, ${fmtTime(e.starts_at)}` : ""}` : "", line2: `${pick(lang, e?.venues, "name")}, ${pick(lang, e?.venues, "city")} · ${label}`, code: tk.code, holder, qrCanvas: canvas });
+    const blob = await ticketImage({ title: pick(lang, e, "title"), line1: e ? `${fmtDate(e.starts_at, lang)}${e.kind === "event" ? `, ${fmtTime(e.starts_at, lang)}` : ""}` : "", line2: `${pick(lang, e?.venues, "name")}, ${pick(lang, e?.venues, "city")} · ${label}`, code: tk.code, holder, qrCanvas: canvas });
     if (blob) { download(`${tk.code}.png`, blob); toast(t("imageSaved")); }
   };
 
@@ -106,7 +106,7 @@ export function TicketCard({ tk, holder, compact, rotKey, onChange }: { tk: Wall
           </div>
           <span className={`status ${status[0]}`} role="status">{status[1]}</span>
         </div>
-        <div className="meta">{e ? (e.kind === "event" ? `${fmtDate(e.starts_at)}, ${fmtTime(e.starts_at)}` : pick(lang, e.venues, "city")) : ""} · {pick(lang, e?.venues, "name")}</div>
+        <div className="meta">{e ? (e.kind === "event" ? `${fmtDate(e.starts_at, lang)}, ${fmtTime(e.starts_at, lang)}` : pick(lang, e.venues, "city")) : ""} · {pick(lang, e?.venues, "name")}</div>
         <div className="dash" />
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
           <LiveQr tk={tk} rotKey={rotKey} size={compact ? 80 : 96} />
@@ -191,7 +191,7 @@ export function MemberCard({ tk, holder, rotKey }: { tk: WalletTicket; holder: s
         <span style={{ fontSize: 12, padding: "4px 9px", borderRadius: 6, background: "var(--g1)", color: "#fff", fontWeight: 600 }}>{plan}</span>
       </div>
       <div style={{ fontSize: 16, fontWeight: 600, marginTop: 14 }}>{pick(lang, e, "title")}</div>
-      <div className="dim" style={{ fontSize: 13 }}>{holder} · {tk.code}{tk.valid_until ? ` · ${t("validUntil")} ${fmtDate(tk.valid_until)}` : ""}</div>
+      <div className="dim" style={{ fontSize: 13 }}>{holder} · {tk.code}{tk.valid_until ? ` · ${t("validUntil")} ${fmtDate(tk.valid_until, lang)}` : ""}</div>
       <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 14 }}>
         <LiveQr tk={{ ...tk, state: "valid" }} rotKey={rotKey} size={72} />
         <div className="dim" style={{ fontSize: 13, lineHeight: 1.7 }}>

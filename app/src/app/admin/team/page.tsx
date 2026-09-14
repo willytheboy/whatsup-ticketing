@@ -11,6 +11,7 @@ export default function Team() {
   const admin = useAdmin();
   const [rows, setRows] = useState<any[] | null>(null);
   const [organisers, setOrganisers] = useState<any[]>([]);
+  const [plans, setPlans] = useState<Record<string, { plan: string; until: string }>>({});
   const [form, setForm] = useState({ email: "", role: "organiser", organiser_id: "" });
   const [msg, setMsg] = useState("");
 
@@ -18,10 +19,11 @@ export default function Team() {
     if (!admin.tenant) return;
     const [{ data: m }, { data: o }] = await Promise.all([
       sb().from("v_admin_members").select("*").eq("tenant_id", admin.tenant.id).order("role"),
-      sb().from("organisers").select("id,name").eq("tenant_id", admin.tenant.id).order("name"),
+      sb().from("organisers").select("id,name,plan,plan_until,verified,whatsapp").eq("tenant_id", admin.tenant.id).order("name"),
     ]);
     setRows(m ?? []);
     setOrganisers(o ?? []);
+    setPlans(Object.fromEntries((o ?? []).map((x: any) => [x.id, { plan: x.plan ?? "free", until: x.plan_until ? String(x.plan_until).slice(0, 10) : "" }])));
   };
   useEffect(() => { load(); }, [admin.tenant]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -39,6 +41,13 @@ export default function Team() {
     load();
   };
 
+  const savePlan = async (id: string) => {
+    const p = plans[id]; if (!p) return;
+    const { error } = await sb().from("organisers").update({ plan: p.plan, plan_until: p.plan === "free" ? null : p.until ? new Date(p.until).toISOString() : null }).eq("id", id);
+    setMsg(error ? error.message : "Plan saved"); load();
+  };
+  const toggleVerified = async (o: any) => { await sb().from("organisers").update({ verified: !o.verified }).eq("id", o.id); load(); };
+
   return (
     <>
       <div className="bo-head">
@@ -55,6 +64,21 @@ export default function Team() {
           <button className="btn green sm" disabled={!form.email} onClick={() => grant(false)}>Grant</button>
         </div>
         {msg && <div className="note" style={{ marginTop: 8 }}>{msg}</div>}
+      </Panel>
+      <Panel title="Organiser plans" action={<span className="dim" style={{ fontSize: 12 }}>Venue is negotiated, so it is set here; Pro is self-serve from the app.</span>}>
+        <div className="tbl-wrap"><table className="tbl">
+          <thead><tr><th>Organiser</th><th>Plan</th><th>Until</th><th>Verified</th><th>WhatsApp</th><th></th></tr></thead>
+          <tbody>{organisers.map((o) => (
+            <tr key={o.id}>
+              <td>{o.name}</td>
+              <td><select value={plans[o.id]?.plan ?? "free"} onChange={(e) => setPlans({ ...plans, [o.id]: { ...plans[o.id], plan: e.target.value } })}>{["free", "pro", "venue"].map((k) => <option key={k}>{k}</option>)}</select></td>
+              <td><input type="date" value={plans[o.id]?.until ?? ""} onChange={(e) => setPlans({ ...plans, [o.id]: { ...plans[o.id], until: e.target.value } })} disabled={(plans[o.id]?.plan ?? "free") === "free"} /></td>
+              <td><button className="btn ghost xs" onClick={() => toggleVerified(o)}>{o.verified ? "✓ verified" : "verify"}</button></td>
+              <td className="dim">{o.whatsapp ?? "—"}</td>
+              <td><button className="btn green xs" onClick={() => savePlan(o.id)}>Save</button></td>
+            </tr>
+          ))}</tbody>
+        </table></div>
       </Panel>
       <Panel>
         {rows === null ? <Empty>Loading…</Empty> : (

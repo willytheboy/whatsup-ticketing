@@ -23,7 +23,7 @@ export function Badge({ l, lang }: { l: Listing; lang: Lang }) {
 
 /** Short date line: events show the day, venues and stays say what they are. */
 export function whenLine(l: Listing, lang: Lang): string {
-  if (l.kind === "event") return fmtDate(l.starts_at);
+  if (l.kind === "event") return fmtDate(l.starts_at, lang);
   if (l.kind === "stay") return t(lang, "stayLine");
   if (l.kind === "pass") return t(lang, "passLine");
   return t(lang, "openDaily");
