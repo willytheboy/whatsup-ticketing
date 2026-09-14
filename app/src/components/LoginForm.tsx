@@ -38,7 +38,7 @@ export default function LoginForm({ onDone }: { onDone: () => void }) {
           <>
             <p className="note" style={{ margin: 0 }}>{t("enterCode")} <b>{phone}</b></p>
             <div className="field">
-              <input inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" style={{ textAlign: "center", fontSize: 22, letterSpacing: ".3em" }} />
+              <input inputMode="numeric" maxLength={6} aria-label="Code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" style={{ textAlign: "center", fontSize: 22, letterSpacing: ".3em" }} />
             </div>
             <button
               className="btn green"
@@ -58,7 +58,7 @@ export default function LoginForm({ onDone }: { onDone: () => void }) {
           <>
             <div className="field">
               <span className="label">{t("waNumber")}</span>
-              <input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+961 3 000 000" />
+              <input inputMode="tel" aria-label="WhatsApp number" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+961 3 000 000" />
             </div>
             <button
               className="btn wa"
@@ -79,11 +79,11 @@ export default function LoginForm({ onDone }: { onDone: () => void }) {
         <>
           <div className="field">
             <span className="label">{t("email")}</span>
-            <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="email" autoComplete="email" aria-label="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="field">
             <span className="label">{t("password")}</span>
-            <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input type="password" autoComplete="current-password" aria-label="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <button
             className="btn green"

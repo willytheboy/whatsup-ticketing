@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sbServer } from "@/lib/supabase-server";
+import { sbServer, sbUser } from "@/lib/supabase-server";
 import { TENANT, allInKind } from "@/lib/config";
 import { LIST_SELECT, lowest, type Listing } from "@/lib/catalogue";
 
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
     const ai = await claude(`Map the question to JSON {"intent": one of ${JSON.stringify(INTENTS)}, "days": number}. Only JSON.`, q, 60);
     if (ai) { try { const j = JSON.parse(ai.replace(/```json|```/g, "")); if (INTENTS.includes(j.intent)) { intent = j.intent; days = Number(j.days) || days; } } catch {} }
     if (!intent) intent = /organis|venue|top|أفضل|منظ/i.test(q) ? "top_organisers" : /cash|كاش/i.test(q) ? "cash_held" : /payout|settle|owe|دفع/i.test(q) ? "payouts_due" : /refund|استرجاع/i.test(q) ? "refunds" : /promo|boost|ترويج/i.test(q) ? "promotions" : /no.?show|ما إجو/i.test(q) ? "no_shows" : /sign|user|مستخدم/i.test(q) ? "signups" : "revenue";
-    const db = sbServer(); const since = new Date(Date.now() - days * 864e5).toISOString();
+    const db = sbUser(); const since = new Date(Date.now() - days * 864e5).toISOString();
     let answer = ""; let rows: any[] = [];
     if (intent === "revenue") { const { data } = await db.from("orders").select("face_total,buyer_fee,organiser_fee,processing_fee,total,payment_method").eq("status", "paid").gte("paid_at", since); rows = data ?? []; const s = (k: string) => rows.reduce((a, r) => a + Number(r[k] ?? 0), 0); answer = `Last ${days}d: ${rows.length} paid orders · face $${s("face_total").toFixed(0)} · buyer fees $${s("buyer_fee").toFixed(0)} · organiser fees $${s("organiser_fee").toFixed(0)} · processing $${s("processing_fee").toFixed(0)} · platform take ≈ $${(s("buyer_fee") + s("organiser_fee") - s("processing_fee")).toFixed(0)}.`; }
     else if (intent === "top_organisers") { const { data } = await db.from("organiser_event_stats").select("organiser_id,title,gross,sold"); rows = data ?? []; const by: Record<string, number> = {}; for (const r of rows) by[r.organiser_id] = (by[r.organiser_id] ?? 0) + Number(r.gross); const top = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 5); const { data: orgs } = await db.from("organisers").select("id,name").in("id", top.map((x) => x[0])); answer = "Top organisers by gross: " + top.map(([id, g], i) => `${i + 1}. ${orgs?.find((o) => o.id === id)?.name ?? id.slice(0, 6)} $${g.toFixed(0)}`).join(" · "); }

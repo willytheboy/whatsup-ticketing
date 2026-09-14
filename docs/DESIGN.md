@@ -13,12 +13,12 @@ Source of truth: `WhatsUp_App_Design_Brief_v1.md` and prototype `whatsup-prototy
 | Cash is first class | `OfferPicker` shows *Pay by card* and *Cash / Whish* as peers |
 | One object, seven offers | `events.kind` + `tiers.kind` + `tables_vip` + `events.deals`; pickers in `OfferPicker.tsx` |
 | Arabic-native | logical properties throughout; Lebanese dialect strings in `lib/i18n.ts`; `html[dir=rtl]` rules |
-| Thumb first, 44 px targets | `.btn`, `.chip`, `.tab`, `.list-btn`, `.slot` minimum heights |
+| Thumb first, 44 px targets | `.btn`, `.chip`, `.tab`, `.list-btn`, `.slot` minimum heights; pinch-zoom stays enabled (WCAG 1.4.4) |
 | Reveal, don't gate | every screen renders signed-out; sign-in is asked at booking, in the wallet and in rooms |
 
 ## Tokens (`:root`)
 
-`--g1 #3B6D11` · `--g2 #639922` · `--g3 #97C459` · `--g4 #EAF3DE` · `--red #E24B4A` · `--red-dark #A32D2D` · `--ink #000` · `--ink2 #444441` · `--ink3 #7A7975` · `--line #DDDBD3` · `--sand #F4F3EE` · amber `#B45309 / #FEF3C7`.
+`--g1 #3B6D11` · `--g2 #639922` · `--g3 #97C459` · `--g4 #EAF3DE` · `--red #E24B4A` · `--red-dark #A32D2D` · `--ink #000` · `--ink2 #444441` · `--ink3 #6B6A66` (brief: #7A7975, darkened to pass 4.5:1 on white) · `--line #DDDBD3` · `--sand #F4F3EE` · amber `#B45309 / #FEF3C7`.
 Radii: 14 cards (`--r`), 10 buttons and inputs (`--rb`), 999 chips, 18 tickets and member card (`--rt`). Page padding 18 px.
 Legacy aliases (`--green`, `--surface`, `--muted`, …) keep the back office on the same palette.
 
@@ -34,6 +34,10 @@ Six tabs for everyone: Home · Search · Ask · Radio · Vibe · Wallet. Profile
 
 Deep links: `/e/<slug>` opens a listing, `/?ref=<CODE>` stores a promoter or referral code (and counts the click), `/ask?q=` pre-asks the concierge.
 
-## Not in v1 (from the brief's open questions and later phases)
+## Added in v0.6.0
 
-Dark mode · squad / split-pay cards (the button toasts) · ticket transfer and resale pool (waitlist "Notify me" ships; resale copy is a placeholder) · seat maps · calendar sheet for stays (a date input for now) · push notifications (WhatsApp only).
+Live QR (rotating token, 2-minute slots) on ticket and member cards · ticket actions sheet (save image, calendar, transfer, sell back, refund, squad) · calendar sheet for stays · table packages picker · refund-protection add-on and fan-credit rows at checkout · squad page · claim page · listing editor with tabs (basics / offers / tables / deals / refunds) and cover upload · promo codes, insights, refunds, developers pages · door scanner with counters, offline badge, lookup and "mark paid" · For-you row and heart · settings for currency, WhatsApp, email copies, data export and account deletion · back-office queues (promotions, moments, tenants, errors) and flags.
+
+## Not in v1
+
+Dark mode · seat maps · push notifications (WhatsApp only) · native wallet passes (Apple / Google) need signing certificates.

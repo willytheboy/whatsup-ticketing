@@ -4,7 +4,7 @@
 :root{
   --g1:#3B6D11;--g2:#639922;--g3:#97C459;--g4:#EAF3DE;--g0:#27500A;
   --red:#E24B4A;--red-dark:#A32D2D;
-  --ink:#000;--ink2:#444441;--ink3:#7A7975;--line:#DDDBD3;--sand:#F4F3EE;--white:#fff;
+  --ink:#000;--ink2:#444441;--ink3:#6B6A66;--line:#DDDBD3;--sand:#F4F3EE;--white:#fff;
   --amber:#B45309;--amber-soft:#FEF3C7;
   --r:14px;--rb:10px;--rt:18px;
   /* legacy aliases used by the back office */
@@ -86,7 +86,7 @@ html[dir=rtl] .brand .w2{letter-spacing:0}
 .photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .photo .facet{position:absolute;inset:auto 0 0 0;height:45%;opacity:.55}
 .badge{position:absolute;inset-inline-start:8px;top:8px;font-size:10px;font-weight:600;padding:3px 7px;border-radius:5px;background:#000;color:#fff;line-height:1.3;z-index:1}
-.badge.ev{background:var(--red)}
+.badge.ev{background:var(--red-dark)}
 .badge.pass{background:var(--g1)}
 .badge.feat{background:#fff;color:var(--ink)}
 .badge.end{inset-inline-start:auto;inset-inline-end:8px}

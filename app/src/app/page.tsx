@@ -4,7 +4,7 @@ import CityPill from "@/components/CityPill";
 import PassPromo from "@/components/PassPromo";
 import { BigCard, SmallCard } from "@/components/Cards";
 import { I } from "@/components/Icons";
-import { sbServer } from "@/lib/supabase-server";
+import { sbServer, sbUser } from "@/lib/supabase-server";
 import { TENANT, RAIL, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/config";
 import { getLang, getCity, T } from "@/lib/lang-server";
 import { LIST_SELECT, inRail, isFeatured, type Listing } from "@/lib/catalogue";
@@ -23,14 +23,15 @@ export default async function Home({ searchParams }: { searchParams: { c?: strin
   const { data: tenant } = await db.from("tenants").select("id").eq("slug", TENANT).maybeSingle();
   let q = db.from("events").select(LIST_SELECT).in("status", ["live", "sold_out"]).or(`kind.neq.event,starts_at.gte.${new Date(now.getTime() - 864e5).toISOString()}`).order("starts_at");
   if (tenant) q = q.eq("tenant_id", tenant.id);
-  const [{ data }, { data: tenants }, { data: { user } }] = await Promise.all([q, db.from("tenants").select("slug,name,country,country_ar,live").order("live", { ascending: false }), db.auth.getUser()]);
+  const me = sbUser();
+  const [{ data }, { data: tenants }, { data: { user } }] = await Promise.all([q, db.from("tenants").select("slug,name,country,country_ar,live").order("live", { ascending: false }), me.auth.getUser()]);
   const all = (data ?? []) as unknown as Listing[];
   // For you: categories the signed-in user bought or saved before, minus what they already hold
   let forYou: Listing[] = [];
   if (user) {
     const [{ data: mine }, { data: saved }] = await Promise.all([
-      db.from("orders").select("event_id,events(category,kind)").eq("buyer_id", user.id).in("status", ["paid", "reserved"]).limit(50),
-      db.from("saved_listings").select("event_id,events(category,kind)").eq("user_id", user.id).limit(50),
+      me.from("orders").select("event_id,events(category,kind)").eq("buyer_id", user.id).in("status", ["paid", "reserved"]).limit(50),
+      me.from("saved_listings").select("event_id,events(category,kind)").eq("user_id", user.id).limit(50),
     ]);
     const seen = new Set((mine ?? []).map((o: any) => o.event_id));
     const cats = new Map<string, number>();

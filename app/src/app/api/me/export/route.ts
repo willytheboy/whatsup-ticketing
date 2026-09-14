@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { sbServer } from "@/lib/supabase-server";
+import { sbUser } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 /** GET /api/me/export — everything WhatsUp holds about the signed-in user, as JSON (GDPR-style export). */
 export async function GET() {
-  const db = sbServer();
+  const db = sbUser();
   const { data: { user } } = await db.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   const { data, error } = await db.rpc("my_export");

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import TopBar from "@/components/TopBar";
 import { SmallCard } from "@/components/Cards";
-import { sbServer } from "@/lib/supabase-server";
+import { sbUser } from "@/lib/supabase-server";
 import { getLang, T } from "@/lib/lang-server";
 import { LIST_SELECT, type Listing } from "@/lib/catalogue";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function SavedPage() {
   const lang = getLang();
   const t = (k: string) => T(lang, k);
-  const db = sbServer();
+  const db = sbUser();
   const { data: { user } } = await db.auth.getUser();
   const { data } = user ? await db.from("saved_listings").select(`event_id, events(${LIST_SELECT})`).eq("user_id", user.id).order("created_at", { ascending: false }) : { data: [] as any[] };
   const list = ((data ?? []) as any[]).map((r) => r.events).filter(Boolean) as Listing[];

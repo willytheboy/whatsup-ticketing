@@ -39,10 +39,10 @@ export function nudgesFor(a: { events: EvLite[]; tiers: TierLite[]; stats: { eve
     const waiting = mine.reduce((s, x) => s + (a.waits[x.id] ?? 0), 0);
     const featured = e.featured_until && new Date(e.featured_until) > new Date();
     if (waiting >= 3) out.push({ title: `${waiting} ${L("nWaitT")} · ${name(e)}`, body: L("nWaitB"), cta: L("reopenTier"), href: `/org/e/${e.id}`, tone: "green" });
-    if (fc && days > 0 && days <= 10 && fc.pct < 40 && !featured) out.push({ title: `${name(e)} · ${fc.pct}% ${L("forecast")}`, body: L("nSlowB"), cta: L("promote"), href: `/org/promote/${e.id}`, tone: "amber" });
-    if (fc && fc.soldOutBy && days > 2) out.push({ title: `${name(e)} · ${L("nHotT")}`, body: L("nHotB"), cta: L("manage"), href: `/org/e/${e.id}`, tone: "green" });
+    if (e.kind === "event" && fc && days > 0 && days <= 10 && fc.pct < 40 && !featured) out.push({ title: `${name(e)} · ${fc.pct}% ${L("forecast")}`, body: L("nSlowB"), cta: L("promote"), href: `/org/promote/${e.id}`, tone: "amber" });
+    if (e.kind === "event" && fc && fc.soldOutBy && days > 2) out.push({ title: `${name(e)} · ${L("nHotT")}`, body: L("nHotB"), cta: L("manage"), href: `/org/e/${e.id}`, tone: "green" });
     if (!e.cover_url) out.push({ title: `${name(e)} · ${L("nCoverT")}`, body: L("nCoverB"), cta: L("addCover"), href: `/org/e/${e.id}`, tone: "amber" });
-    if (days < 0 && days > -2) {
+    if (e.kind === "event" && days < 0 && days > -2) {
       const st = a.stats.find((s) => s.event_id === e.id);
       if (st && st.sold && st.checked_in / st.sold < 0.5) out.push({ title: `${name(e)} · ${Math.round((1 - st.checked_in / st.sold) * 100)}% ${L("noShow")}`, body: L("nNoShowB"), cta: L("open"), href: `/org/insights`, tone: "red" });
     }
