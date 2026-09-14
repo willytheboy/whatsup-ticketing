@@ -1,51 +1,121 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { admin, asUser, json, cors, verifyToken } from "./lib.ts";
 
-/** Door scan. Tickets, day passes, items and table bookings are single use; passes (member cards) scan every visit until valid_until.
-    A pass scanned at any partner venue is accepted: the event_id check applies to everything except passes. */
+/** Door scan (brief §5.12).
+ *  - tickets, items and table bookings are single use; day passes scan once per calendar day; member passes scan every visit until valid_until
+ *  - WU1 static tokens and WU2 rotating tokens (±2 min) are both accepted; the response says which
+ *  - a table booking scanned at the door releases its hold: the deposit is reported so the floor knows it comes off the bill
+ *  - actions: {action:"collect", order_id} marks a pay-at-the-door order paid; {action:"sync", scans:[…]} replays an offline queue;
+ *    {action:"manifest"} returns the event's ticket list for offline checks; {action:"lookup", q} finds a ticket by code or name
+ */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return cors();
   if (req.method !== "POST") return json({ error: "method" }, 405);
   const { data: { user } } = await asUser(req).auth.getUser();
   if (!user) return json({ error: "unauthenticated" }, 401);
   const b = await req.json().catch(() => null);
-  if (!b?.token || !b?.event_id) return json({ error: "bad_request" }, 400);
+  if (!b?.event_id) return json({ error: "bad_request" }, 400);
   const db = admin();
 
-  const { data: ev } = await db.from("events").select("id,organiser_id,title,tenant_id").eq("id", b.event_id).single();
+  const { data: ev } = await db.from("events").select("id,organiser_id,title,tenant_id,kind,starts_at").eq("id", b.event_id).single();
   if (!ev) return json({ error: "event" }, 404);
   const { data: mem } = await db.from("memberships").select("role").eq("user_id", user.id).eq("organiser_id", ev.organiser_id).in("role", ["organiser", "door", "country_admin", "super_admin"]);
   if (!(mem && mem.length)) return json({ error: "forbidden" }, 403);
 
-  const record = async (ticket_id: string | null, result: string) => {
-    if (ticket_id) await db.from("scans").insert({ ticket_id, event_id: ev.id, device_id: b.device_id ?? null, scanned_by: user.id, result });
+  const record = async (ticket_id: string | null, result: string, at?: string) => {
+    if (ticket_id) await db.from("scans").insert({ ticket_id, event_id: ev.id, device_id: b.device_id ?? null, scanned_by: user.id, result, scanned_at: at ?? new Date().toISOString(), synced_at: new Date().toISOString() });
   };
+  const beirutDay = (d: Date | string) => new Date(d).toLocaleDateString("en-CA", { timeZone: "Asia/Beirut" });
 
-  const id = await verifyToken(String(b.token));
-  if (!id) return json({ result: "invalid", reason: "bad_signature" });
-  const { data: tk } = await db.from("tickets").select("id,event_id,state,code,seat,scanned_at,tier_id,holder_id,valid_until,tiers(name,kind)").eq("id", id).single();
+  // ---- door actions
+  if (b.action === "collect") {
+    const { data: ok, error } = await db.rpc("door_collect", { p_order: b.order_id });
+    if (error) return json({ error: error.message }, 400);
+    return json({ ok: !!ok });
+  }
+  if (b.action === "manifest") {
+    const { data: rows } = await db.from("tickets").select("id,code,state,seat,scanned_at,valid_until,tier_id,tiers(name,kind),holder:profiles!holder_id(name)").eq("event_id", ev.id).in("state", ["valid", "scanned", "reserved"]);
+    const { data: counts } = await db.from("tiers").select("id,name,kind,capacity,sold").eq("event_id", ev.id);
+    return json({ event: { id: ev.id, title: ev.title }, at: new Date().toISOString(), tickets: (rows ?? []).map((r: any) => ({ id: r.id, code: r.code, state: r.state, seat: r.seat, scanned_at: r.scanned_at, valid_until: r.valid_until, tier: r.tiers?.name ?? null, kind: r.tiers?.kind ?? (r.tier_id ? "ticket" : "table"), holder: r.holder?.name ?? null })), tiers: counts ?? [] });
+  }
+  if (b.action === "lookup") {
+    const q = String(b.q ?? "").trim();
+    if (q.length < 3) return json({ tickets: [] });
+    const { data: byCode } = await db.from("tickets").select("id,code,state,seat,token,tiers(name,kind),holder:profiles!holder_id(name,phone)").eq("event_id", ev.id).ilike("code", `%${q}%`).limit(10);
+    const { data: byName } = await db.from("tickets").select("id,code,state,seat,token,tiers(name,kind),holder:profiles!holder_id!inner(name,phone)").eq("event_id", ev.id).or(`name.ilike.%${q}%,phone.ilike.%${q}%`, { referencedTable: "holder" }).limit(10);
+    const seen = new Set<string>(); const out: any[] = [];
+    for (const r of [...(byCode ?? []), ...(byName ?? [])] as any[]) if (!seen.has(r.id)) { seen.add(r.id); out.push({ id: r.id, code: r.code, state: r.state, seat: r.seat, token: r.token, tier: r.tiers?.name, kind: r.tiers?.kind ?? "ticket", holder: r.holder?.name ?? null }); }
+    return json({ tickets: out });
+  }
+  if (b.action === "sync") {
+    // offline queue: [{token, at, result}] — accept scans made while the device was offline, in order
+    const results: any[] = [];
+    for (const s of (b.scans ?? []).slice(0, 500)) {
+      const v = await verifyToken(String(s.token ?? "")).catch(() => null);
+      const id = v?.id ?? (String(s.token ?? "").startsWith("WU") ? null : s.ticket_id ?? null);
+      if (!id) { results.push({ token: s.token, result: "invalid" }); continue; }
+      const { data: tk } = await db.from("tickets").select("id,event_id,state,code,tiers(kind)").eq("id", id).single();
+      if (!tk || (tk.event_id !== ev.id && (tk.tiers as any)?.kind !== "pass")) { results.push({ token: s.token, result: "invalid" }); continue; }
+      if (tk.state === "valid" || (tk.tiers as any)?.kind === "pass") {
+        await db.from("tickets").update({ state: "scanned", scanned_at: s.at ?? new Date().toISOString() }).eq("id", tk.id).in("state", ["valid", "scanned"]);
+        await record(tk.id, "valid", s.at); results.push({ token: s.token, code: tk.code, result: "valid" });
+      } else if (tk.state === "scanned") { await record(tk.id, "duplicate", s.at); results.push({ token: s.token, code: tk.code, result: "duplicate" }); }
+      else { await record(tk.id, "invalid", s.at); results.push({ token: s.token, code: tk.code, result: tk.state }); }
+    }
+    return json({ synced: results.length, results });
+  }
+
+  // ---- a scan
+  if (!b.token) return json({ error: "bad_request" }, 400);
+  const v = await verifyToken(String(b.token));
+  if (!v) return json({ result: "invalid", reason: String(b.token).startsWith("WU2") ? "expired_token" : "bad_signature" });
+  const id = v.id;
+  const { data: tk } = await db.from("tickets").select("id,event_id,state,code,seat,scanned_at,tier_id,holder_id,valid_until,order_id,recipient,tiers(name,kind)").eq("id", id).single();
   if (!tk) { await record(null, "invalid"); return json({ result: "invalid", reason: "unknown" }); }
   const tier: any = tk.tiers;
   const kind = tier?.kind ?? (tk.tier_id ? "ticket" : "table");
-  const { data: holder } = await db.from("profiles").select("name").eq("id", tk.holder_id).single();
+  const { data: holder } = tk.holder_id ? await db.from("profiles").select("name").eq("id", tk.holder_id).single() : { data: null };
+  const holderName = holder?.name ?? (tk.recipient as any)?.name ?? null;
+  const base = { kind, code: tk.code, seat: tk.seat, tier: tier?.name ?? (kind === "table" ? tk.seat : null), holder: holderName, rotating: v.rotating };
 
   // Member card: repeat scans, any partner venue of the tenant, until valid_until
   if (kind === "pass") {
-    if (tk.state === "void" || tk.state === "transferred") { await record(tk.id, "void"); return json({ result: "void", code: tk.code, state: tk.state }); }
-    if (tk.state === "reserved") { await record(tk.id, "invalid"); return json({ result: "reserved", code: tk.code, reason: "pay_at_door_first" }); }
-    if (tk.valid_until && new Date(tk.valid_until) < new Date()) { await record(tk.id, "expired"); return json({ result: "expired", code: tk.code, valid_until: tk.valid_until }); }
+    if (tk.state === "void" || tk.state === "transferred" || tk.state === "sold_back") { await record(tk.id, "void"); return json({ result: "void", ...base, state: tk.state }); }
+    if (tk.state === "reserved") { await record(tk.id, "invalid"); return json({ result: "reserved", ...base, reason: "pay_at_door_first", order_id: tk.order_id }); }
+    if (tk.valid_until && new Date(tk.valid_until) < new Date()) { await record(tk.id, "expired"); return json({ result: "expired", ...base, valid_until: tk.valid_until }); }
     await db.from("tickets").update({ state: "scanned", scanned_at: new Date().toISOString() }).eq("id", tk.id);
     await record(tk.id, "valid");
-    return json({ result: "valid", kind, code: tk.code, tier: tier?.name, holder: holder?.name ?? null, valid_until: tk.valid_until, repeat: true });
+    return json({ result: "valid", ...base, valid_until: tk.valid_until, repeat: true });
   }
 
-  if (tk.event_id !== ev.id) { await record(tk.id, "invalid"); return json({ result: "invalid", reason: "wrong_event" }); }
-  if (tk.state === "scanned") { await record(tk.id, "duplicate"); return json({ result: "duplicate", kind, code: tk.code, seat: tk.seat, scanned_at: tk.scanned_at }); }
-  if (tk.state === "void" || tk.state === "transferred") { await record(tk.id, "void"); return json({ result: "void", code: tk.code, state: tk.state }); }
-  if (tk.state === "reserved") { await record(tk.id, "invalid"); return json({ result: "reserved", kind, code: tk.code, reason: "pay_at_door_first" }); }
+  if (tk.event_id !== ev.id) { await record(tk.id, "invalid"); return json({ result: "invalid", reason: "wrong_event", ...base }); }
+  if (tk.state === "void" || tk.state === "transferred" || tk.state === "sold_back" || tk.state === "resale") { await record(tk.id, "void"); return json({ result: "void", ...base, state: tk.state }); }
+  if (tk.state === "reserved") { await record(tk.id, "invalid"); return json({ result: "reserved", ...base, reason: "pay_at_door_first", order_id: tk.order_id }); }
+
+  // Day pass: once per calendar day (Beirut) — a second scan the same day is a duplicate, a new day is a fresh visit
+  if (kind === "daypass") {
+    if (tk.state === "scanned" && tk.scanned_at && beirutDay(tk.scanned_at) === beirutDay(new Date())) { await record(tk.id, "duplicate"); return json({ result: "duplicate", ...base, scanned_at: tk.scanned_at }); }
+    if (tk.valid_until && new Date(tk.valid_until) < new Date()) { await record(tk.id, "expired"); return json({ result: "expired", ...base, valid_until: tk.valid_until }); }
+    await db.from("tickets").update({ state: "scanned", scanned_at: new Date().toISOString() }).eq("id", tk.id);
+    await record(tk.id, "valid");
+    return json({ result: "valid", ...base, repeat: true });
+  }
+
+  if (tk.state === "scanned") {
+    await record(tk.id, "duplicate");
+    const { count } = await db.from("scans").select("id", { count: "exact", head: true }).eq("ticket_id", tk.id).eq("result", "duplicate");
+    return json({ result: "duplicate", ...base, scanned_at: tk.scanned_at, attempts: count ?? 1 });
+  }
 
   const { data: flipped } = await db.from("tickets").update({ state: "scanned", scanned_at: new Date().toISOString() }).eq("id", tk.id).eq("state", "valid").select("id");
-  if (!flipped || !flipped.length) { await record(tk.id, "duplicate"); return json({ result: "duplicate", kind, code: tk.code }); }
+  if (!flipped || !flipped.length) { await record(tk.id, "duplicate"); return json({ result: "duplicate", ...base }); }
   await record(tk.id, "valid");
-  return json({ result: "valid", kind, code: tk.code, seat: tk.seat, tier: tier?.name ?? (kind === "table" ? tk.seat : null), holder: holder?.name ?? null });
+
+  // Table booking: the hold is released on arrival and the deposit comes off the bill
+  let deposit: number | null = null, party: number | null = null;
+  if (kind === "table" && tk.order_id) {
+    const { data: o } = await db.from("orders").select("table_deposit,meta").eq("id", tk.order_id).single();
+    deposit = o ? Number(o.table_deposit) : null; party = (o?.meta as any)?.party ?? null;
+  }
+  return json({ result: "valid", ...base, deposit, party });
 });
