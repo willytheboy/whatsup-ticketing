@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { sbServer, sbUser } from "@/lib/supabase-server";
 import { allInKind } from "@/lib/config";
 import { getTenantSlug } from "@/lib/tenant-server";
-import { LIST_SELECT, lowest, left, type Listing } from "@/lib/catalogue";
+import { LIST_SELECT, lowest, left, isAccess, type Listing } from "@/lib/catalogue";
+/** Access first (v6): the concierge books entries; when the person names a service it adds the cheapest entrance beside it. */
+const entryFor = (l: Listing, t: Listing["tiers"][number]) => (isAccess(t) || t.requires_access === false ? null : l.tiers.filter((x) => x.kind !== "pass" && left(x) > 0 && isAccess(x)).sort((a, b) => Number(a.face_price) - Number(b.face_price))[0] ?? null);
 
 export const dynamic = "force-dynamic";
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
@@ -81,13 +83,13 @@ export async function POST(req: Request) {
     const system = `You are the What's Up Lebanon concierge. Warm, short, Lebanese. Reply in the user's language (Lebanese Arabic dialect or English). The user is in ${city}. MANDATORY: only recommend listings from this catalogue, never invent: ${kb(L, lang)}. Prices are all-in. You can book tables, day passes, stays, tickets and passes. Max 60 words. End with a line "OPEN: <exact listing title in English>" for the one you recommend most. If the user states a quantity or asks to book, add a final line "BOOK: <exact listing title> | <exact offer name> | <qty>".`;
     let text = await claude(system, history ? `${history}\nUser: ${q}` : q);
     let open: Listing | undefined;
-    let cart: { slug: string; tier_id: string; name: string; qty: number; kind: string } | null = null;
+    let cart: { slug: string; tier_id: string; name: string; qty: number; kind: string; entry_id?: string | null; entry_name?: string | null } | null = null;
     const qtyIn = (() => { const m = q.match(/(\d+)\s*(tickets?|people|persons?|pax|seats?|تذاكر|تذكرة|أشخاص|اشخاص)|for\s+(\d+)|لـ?\s?(\d+)/i); const n = Number(m?.[1] ?? m?.[3] ?? m?.[4]); return n > 0 && n <= 20 ? n : 0; })();
     if (text) {
       const bm = text.match(/BOOK:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(\d+)\s*$/m);
       if (bm) {
-        const l = resolve(bm[1]); const tier = l?.tiers.find((x) => x.name.toLowerCase() === bm[2].trim().toLowerCase() && left(x) > 0) ?? l?.tiers.filter((x) => x.kind !== "pass" && left(x) > 0).sort((a, b) => a.sort - b.sort)[0];
-        if (l && tier) cart = { slug: l.slug, tier_id: tier.id, name: tier.name, qty: Math.min(Number(bm[3]) || 1, tier.per_order_limit || 6), kind: tier.kind };
+        const l = resolve(bm[1]); const tier = l?.tiers.find((x) => x.name.toLowerCase() === bm[2].trim().toLowerCase() && left(x) > 0) ?? l?.tiers.filter((x) => x.kind !== "pass" && left(x) > 0 && isAccess(x)).sort((a, b) => a.sort - b.sort)[0];
+        if (l && tier) { const e = entryFor(l, tier); cart = { slug: l.slug, tier_id: tier.id, name: tier.name, qty: Math.min(Number(bm[3]) || 1, tier.per_order_limit || 6), kind: tier.kind, entry_id: e?.id ?? null, entry_name: e?.name ?? null }; }
         text = text.replace(/\n?BOOK:.*$/m, "").trim();
       }
       const m = text.match(/OPEN:\s*(.+)$/m);
@@ -100,8 +102,8 @@ export async function POST(req: Request) {
         : lang === "ar" ? "ما لقيت شي مناسب هلق. جرّب: طاولة، بحر، إقامة، أو سهرة." : "Nothing matches that yet. Try: a table, the beach, a stay, or a night out.";
     }
     if (!cart && open && qtyIn && /book|reserve|احجز|بدي|get|take/i.test(q)) {
-      const tier = open.tiers.filter((x) => x.kind !== "pass" && left(x) > 0).sort((a, b) => a.sort - b.sort)[0];
-      if (tier) cart = { slug: open.slug, tier_id: tier.id, name: tier.name, qty: Math.min(qtyIn, tier.per_order_limit || 6), kind: tier.kind };
+      const tier = open.tiers.filter((x) => x.kind !== "pass" && left(x) > 0 && isAccess(x)).sort((a, b) => a.sort - b.sort)[0];
+      if (tier) cart = { slug: open.slug, tier_id: tier.id, name: tier.name, qty: Math.min(qtyIn, tier.per_order_limit || 6), kind: tier.kind, entry_id: null, entry_name: null };
     }
     return NextResponse.json({ text, open: open ? { slug: open.slug, title: lang === "ar" && open.title_ar ? open.title_ar : open.title } : null, cart, ai: !!process.env.ANTHROPIC_API_KEY });
   }

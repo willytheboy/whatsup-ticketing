@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
   const { data: tenant } = await db.from("tenants").select("*").eq("slug", b.tenant ?? "lb").single();
   if (!tenant) return json({ error: "tenant" }, 404);
-  const { data: ev } = await db.from("events").select("id,status,doors_at,starts_at,seated,tenant_id,kind,organiser_id,title,refund_policy,addon_options").eq("id", b.event_id).single();
+  const { data: ev } = await db.from("events").select("id,status,doors_at,starts_at,seated,tenant_id,kind,organiser_id,title,refund_policy,addon_options,venue_id,pass_venue_ids").eq("id", b.event_id).single();
   if (!ev || ev.tenant_id !== tenant.id || !["live", "sold_out"].includes(ev.status)) return json({ error: "event_unavailable" }, 409);
   const methods: string[] = [...tenant.payment_methods, "credit"];
   if (!methods.includes(b.payment_method)) return json({ error: "payment_method" }, 400);
@@ -47,9 +47,45 @@ Deno.serve(async (req) => {
     if (l.qty > (t.per_order_limit ?? 6)) return json({ error: "per_order_limit", tier: t.id }, 400);
   }
 
-  // A valid pass covers member_free offers (day passes at partner venues)
-  const { data: passRows } = await db.from("tickets").select("id,valid_until,tiers!inner(kind)").eq("holder_id", user.id).in("state", ["valid", "scanned"]).eq("tiers.kind", "pass");
-  const hasPass = (passRows ?? []).some((p: any) => !p.valid_until || new Date(p.valid_until) > now);
+  // A valid membership covers member_free offers — at the venues the pass lists (v6; legacy passes without a venue list cover all)
+  const { data: coveredByPass } = await db.rpc("pass_covers", { p_user: user.id, p_venue: ev.venue_id, p_tenant: tenant.id });
+  const hasPass = !!coveredByPass;
+
+  // The table, looked up before anything is held (it is only marked reserved once the order exists)
+  let table: any = null;
+  if (b.table_id) {
+    const { data: t } = await db.from("tables_vip").select("*").eq("id", b.table_id).eq("event_id", ev.id).is("reserved_by_order", null).single();
+    if (!t) return json({ error: "table_unavailable" }, 409);
+    table = t;
+  }
+  const pkg = table && b.package_id ? (table.packages ?? []).find((p: any) => p.id === b.package_id) : null;
+  const party = Math.max(0, Math.floor(Number(b.party) || 0));
+
+  // ---- Access first (v6, claude/access-first-rule.md): services need an entrance in this order or one already held
+  const isAccess = (t: any) => (t.role ?? (t.kind === "item" ? "service" : "access")) === "access";
+  const admittedInOrder = lines.reduce((a: number, l: any) => { const t = tiers.find((x) => x.id === l.tier_id)!; return a + (isAccess(t) ? Number(t.admits ?? 1) * l.qty : 0); }, 0)
+    + (table && table.includes_entry !== false ? Math.max(1, party || Number(table.seats ?? 1)) : 0);
+  const serviceLines = lines.filter((l: any) => { const t = tiers.find((x) => x.id === l.tier_id)!; return !isAccess(t) && t.requires_access !== false; });
+  const optionsAll: any[] = Array.isArray(ev.addon_options) ? ev.addon_options : [];
+  const serviceAddons = (Array.isArray(b.addons) ? b.addons : []).filter((a: any) => { const o = optionsAll.find((x) => x.id === a?.id); return o && Number(a.qty) > 0 && o.requires_access !== false; });
+  const servicePackage = !!pkg && !!table && table.includes_entry === false;
+  const needsAccess = serviceLines.length > 0 || serviceAddons.length > 0 || servicePackage;
+  let accessHeld = 0;
+  if (needsAccess && admittedInOrder === 0) {
+    const { data: heldN } = await db.rpc("held_access", { p_event: ev.id, p_user: user.id });
+    accessHeld = Number(heldN ?? 0);
+    if (accessHeld === 0) {
+      // the cheapest entrance still on sale, so the app can add it in one tap
+      const { data: entries } = await db.from("tiers").select("id,name,name_ar,kind,face_price,capacity,sold,held,admits,role").eq("event_id", ev.id).order("face_price");
+      const entry = (entries ?? []).filter((t: any) => isAccess(t) && t.kind !== "pass" && t.capacity - t.sold - t.held > 0)[0] ?? null;
+      return json({ error: "access_required", entry: entry ? { id: entry.id, name: entry.name, name_ar: entry.name_ar, kind: entry.kind, face_price: entry.face_price, admits: entry.admits } : null }, 409);
+    }
+  }
+  const headcount = admittedInOrder || accessHeld;
+  for (const l of lines) {
+    const t = tiers.find((x) => x.id === l.tier_id)!;
+    if (!isAccess(t) && t.per === "person" && t.requires_access !== false && l.qty > headcount) return json({ error: "per_person_limit", tier: t.id, max: headcount }, 400);
+  }
 
   // Inventory: hold from the tier; when the tier is sold out, fulfil from the resale pool (tickets listed with "sell back").
   // Pay-later orders (cash at the door, OMT) never draw on the pool: the seller must be paid out when the buyer pays.
@@ -72,14 +108,6 @@ Deno.serve(async (req) => {
     if (!parked || parked.length < l.qty) { if (parked?.length) await db.from("tickets").update({ state: "resale" }).in("id", parked.map((p) => p.id)); await releaseAll(); return json({ error: "sold_out", tier: l.tier_id }, 409); }
     resale[l.tier_id] = ids;
   }
-
-  let table: any = null;
-  if (b.table_id) {
-    const { data: t } = await db.from("tables_vip").select("*").eq("id", b.table_id).eq("event_id", ev.id).is("reserved_by_order", null).single();
-    if (!t) { await releaseAll(); return json({ error: "table_unavailable" }, 409); }
-    table = t;
-  }
-  const pkg = table && b.package_id ? (table.packages ?? []).find((p: any) => p.id === b.package_id) : null;
 
   let face = 0, fee = 0;
   const priced: any[] = [];
@@ -119,8 +147,9 @@ Deno.serve(async (req) => {
   const addons: { kind: string; amount: number; id?: string; name?: string; qty?: number; unit?: number }[] = [];
   if (b.refund_protection && face > 0) addons.push({ kind: "refund_protection", amount: round2(Math.max(REFUND_PROTECTION_MIN, face * REFUND_PROTECTION_PCT)) });
   // Listing add-ons (v0.7: fast lane, parking…): priced from events.addon_options, never from the client
-  const options: any[] = Array.isArray(ev.addon_options) ? ev.addon_options : [];
-  const ticketQty = priced.filter((p) => ["ticket", "daypass", "item"].includes(p.tier.kind)).reduce((a, p) => a + p.qty, 0);
+  // per-ticket add-ons follow the admitted headcount (people entering on this order, or already in), never the item count
+  const options = optionsAll;
+  const ticketQty = headcount;
   for (const a of Array.isArray(b.addons) ? b.addons : []) {
     const o = options.find((x) => x.id === a?.id);
     if (!o) continue;
@@ -153,13 +182,13 @@ Deno.serve(async (req) => {
   const holdExpires = reserve
     ? new Date(new Date(ev.doors_at ?? ev.starts_at).getTime() - Number(tenant.cash_hold_hours_before_doors) * 3600e3)
     : new Date(Date.now() + Number(tenant.checkout_hold_minutes) * 60e3);
-  const meta = { party: b.party ?? null, time: b.time ?? null, nights: b.nights ?? null, checkin: b.checkin ?? null, gift: b.gift ?? null, covered: priced.some((p) => p.covered), seats: priced.flatMap((p) => p.seats), resale, package: pkg ? { id: pkg.id, name: pkg.name, price: pkgPrice } : null, squad_id: b.squad_id ?? null };
+  const meta = { party: b.party ?? null, time: b.time ?? null, nights: b.nights ?? null, checkin: b.checkin ?? null, gift: b.gift ?? null, covered: priced.some((p) => p.covered), seats: priced.flatMap((p) => p.seats), resale, package: pkg ? { id: pkg.id, name: pkg.name, price: pkgPrice } : null, squad_id: b.squad_id ?? null, admitted: admittedInOrder, access_held: accessHeld };
 
   const { data: order, error: oerr } = await db.from("orders").insert({
     tenant_id: tenant.id, event_id: ev.id, buyer_id: user.id, status: "pending", payment_method: b.payment_method,
     currency: tenant.base_currency, fx_rate: tenant.fx_rate, face_total: round2(face), buyer_fee: round2(fee), discount, table_deposit: tableFace, credit_used: creditUsed,
     total, organiser_fee, processing_fee, addons,
-    fee_snapshot: { buyer_fee_pct: tenant.buyer_fee_pct, buyer_fee_fixed: tenant.buyer_fee_fixed, organiser_fee_pct: tenant.organiser_fee_pct, processing_pct: tenant.processing_pct, kinds: priced.map((p) => p.tier.kind) },
+    fee_snapshot: { buyer_fee_pct: tenant.buyer_fee_pct, buyer_fee_fixed: tenant.buyer_fee_fixed, organiser_fee_pct: tenant.organiser_fee_pct, processing_pct: tenant.processing_pct, kinds: priced.map((p) => p.tier.kind), roles: priced.map((p) => (isAccess(p.tier) ? "access" : "service")) },
     promo_code: promo?.code ?? null, promoter_code: promoterCode, referral_code: referralCode, hold_expires_at: holdExpires.toISOString(), meta,
   }).select().single();
   if (oerr || !order) { await releaseAll(); return json({ error: "order_insert", detail: oerr?.message }, 500); }

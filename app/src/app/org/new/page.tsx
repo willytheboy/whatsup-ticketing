@@ -72,6 +72,8 @@ export default function NewListing() {
     if (!org) return setErr(t("noOrg"));
     const real = offers.filter((o) => o.name.trim());
     if (!real.length) return setErr(t("needOffer"));
+    // access first (v6): a listing that only sells items has nothing that lets people in
+    if (status === "live" && real.every((o) => o.kind === "item")) return setErr(t("accessOfferRequired"));
     setBusy(true); setErr("");
     let venueId = f.venue_id;
     if (!venueId && f.newVenue.trim()) {
@@ -91,7 +93,7 @@ export default function NewListing() {
     if (tables.length) await sb().from("tables_vip").insert(tables.map((o) => ({ event_id: ev.id, name: o.name.trim(), name_ar: o.name_ar || null, seats: Math.max(2, Math.min(20, +o.cap || 6)), min_spend: 0, deposit: +o.price || 0, packages: [] })));
     if (tiers.length) await sb().from("tiers").insert(tiers.flatMap((o, i): any[] => o.kind === "pass"
       ? [1, 4, 12].map((m, j) => ({ event_id: ev.id, name: [t("monthly"), t("season"), t("annual")][j], face_price: Math.round(+o.price * [1, 3.6, 6][j]), capacity: 9999, kind: "pass", plan_months: m, per_order_limit: 1, sort: i * 3 + j }))
-      : [{ event_id: ev.id, name: o.name.trim(), name_ar: o.name_ar || null, face_price: +o.price || 0, capacity: +o.cap || 100, kind: o.kind, per_order_limit: +o.max || 6, sort: i }]));
+      : [{ event_id: ev.id, name: o.name.trim(), name_ar: o.name_ar || null, face_price: +o.price || 0, capacity: +o.cap || 100, kind: o.kind, per_order_limit: +o.max || 6, sort: i, role: o.kind === "item" ? "service" : "access" }]));
     if (f.cover) {
       const path = `${ev.id}/cover-${Date.now()}.${(f.cover.name.split(".").pop() || "jpg").toLowerCase()}`;
       const { error: ue } = await sb().storage.from("covers").upload(path, f.cover, { upsert: true, contentType: f.cover.type });

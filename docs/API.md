@@ -14,8 +14,11 @@ Base URL: `https://whatsup-ticketing-app.vercel.app/api/v1` (the tenant's app do
 
 ```json
 { "events": [ { "id": "…", "slug": "sunset-sessions-rooftop", "title": "Sunset Sessions", "kind": "event", "status": "live", "starts_at": "2026-09-19T17:00:00+00:00", "venue": "The Roof", "city": "Beirut",
-  "tiers": [ { "id": "…", "name": "Regular", "kind": "ticket", "face_price": 25, "capacity": 300, "sold": 194, "held": 0 } ] } ], "count": 1 }
+  "tiers": [ { "id": "…", "name": "Regular", "kind": "ticket", "role": "access", "admits": 1, "requires_access": true, "per": "order", "face_price": 25, "capacity": 300, "sold": 194, "held": 0 } ],
+  "tables": [ { "id": "…", "name": "Table for 6", "seats": 6, "includes_entry": true, "deposit": 100 } ], "addons": [ { "id": "parking", "name": "Parking", "price": 5, "per": "order", "requires_access": true } ] } ], "count": 1 }
 ```
+
+**Access first (v0.9).** Every offer has a `role`: an `access` offer lets people into the venue (`admits` per unit — a cabana admits 6; a table admits its party when `includes_entry` is true), a `service` offer (rentals, kits, merch, add-ons, table packages) is consumed inside and needs an entrance — in the same order, or one the buyer already holds for that listing (a valid or scanned ticket, a day pass for today, a stay, an entry-inclusive table, or a membership whose pass lists the venue). Services with `requires_access: false` (a shuttle, a hike open to non-guests) sell on their own. `per: "person"` services and per-ticket add-ons are capped at the admitted headcount.
 
 `GET /events/{slug}` — one listing (slug or id). 404 when it is not this organiser's.
 
@@ -48,6 +51,8 @@ Events: `order.paid` (a new paid order, including pay-at-the-door orders once ca
 ## Limits and errors
 
 No hard rate limit in v1; keep polling to once a minute or use webhooks. `401 unauthorized` when the key is missing, malformed or revoked; `404 not_found` for a listing that is not yours; `500` with `{ "error": "…" }` on our side, safe to retry.
+
+Checkout (the `create-order` function behind the app) refuses an order with `409 { "error": "access_required", "entry": { "id", "name", "kind", "face_price", "admits" } }` when a service is ordered without an entrance — `entry` is the cheapest entry still on sale, so a client can add it in one tap — and with `400 { "error": "per_person_limit", "tier", "max" }` when a per-person service exceeds the headcount. A listing cannot be published with services and no entry offer (`access_offer_required`).
 
 ## Examples
 

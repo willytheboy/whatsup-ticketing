@@ -1,6 +1,6 @@
 {
   "name": "whatsup-ticketing",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "description": "What's Up Lebanon — everything to do in a city, tickets on WhatsApp. Consumer app, venue tools and back office in one Next.js 14 codebase.",
   "scripts": {

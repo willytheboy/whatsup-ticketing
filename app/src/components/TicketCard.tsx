@@ -13,11 +13,13 @@ import { rotatingToken, secondsToNextSlot, icsFor, download, ticketImage } from 
 export type WalletTicket = {
   id: string; code: string; token: string; seat: string | null; state: string; created_at: string; valid_until: string | null; order_id: string | null; recipient?: { name?: string; phone?: string } | null;
   events: { id: string; slug: string; title: string; title_ar: string | null; starts_at: string; ends_at?: string | null; doors_at?: string | null; kind: string; refund_policy?: any; venues: { name: string; name_ar: string | null; city: string; city_ar: string | null } | null; organisers?: { whatsapp: string | null } | null } | null;
-  tiers: { name: string; name_ar: string | null; kind: OfferKind; plan_months: number | null; note: string | null; face_price?: number } | null;
+  tiers: { name: string; name_ar: string | null; kind: OfferKind; plan_months: number | null; note: string | null; face_price?: number; role?: "access" | "service"; admits?: number } | null;
   orders: { meta: any; total: number; payment_method: string | null; addons?: any[]; refund_status?: string | null } | null;
 };
 const pick = (lang: string, row: any, key: string) => (lang === "ar" && row?.[`${key}_ar`]) || row?.[key] || "";
 export const kindOf = (tk: WalletTicket): OfferKind => tk.tiers?.kind ?? (tk.seat && !tk.tiers ? "table" : "ticket");
+/** Access first (v6): an entry admits people; a service QR is a pickup shown together with the entry. */
+export const isService = (tk: WalletTicket) => (tk.tiers?.role ?? (kindOf(tk) === "item" ? "service" : "access")) === "service";
 export const isPast = (tk: WalletTicket) => { const e = tk.events; if (!e) return false; const end = e.kind === "event" ? new Date(e.starts_at).getTime() + 6 * 3600e3 : new Date(e.ends_at ?? e.starts_at).getTime() + 864e5; return end < Date.now(); };
 
 function shareText(tk: WalletTicket, lang: string) {
@@ -62,7 +64,7 @@ export function TicketCard({ tk, holder, compact, rotKey, onChange }: { tk: Wall
   const [form, setForm] = useState({ name: "", phone: "", reason: "" });
   const [busy, setBusy] = useState(false);
   const qrCanvas = useRef<HTMLDivElement>(null);
-  const label = kind === "table" ? `${t("table")}${meta.party ? ` · ${meta.party}` : ""}${meta.time ? ` · ${meta.time}` : ""}${meta.package?.name ? ` · ${meta.package.name}` : ""}` : kind === "stay" ? `${meta.nights ?? 1} ${t("nights")}${meta.checkin ? ` · ${meta.checkin}` : ""}` : pick(lang, tk.tiers, "name");
+  const label = kind === "table" ? `${t("table")}${meta.party ? ` · ${meta.party}` : ""}${meta.time ? ` · ${meta.time}` : ""}${meta.package?.name ? ` · ${meta.package.name}` : ""}` : kind === "stay" ? `${meta.nights ?? 1} ${t("nights")}${meta.checkin ? ` · ${meta.checkin}` : ""}` : `${pick(lang, tk.tiers, "name")}${Number(tk.tiers?.admits ?? 1) > 1 ? ` · ${t("admits")} ${tk.tiers?.admits}` : ""}`;
   const status = used ? ["used", `✓ ${t(kind === "table" ? "holdReleased" : "used")}`]
     : tk.state === "reserved" ? ["hold", t("reserved")]
     : tk.state === "resale" ? ["hold", t("listedResale")]
@@ -119,7 +121,7 @@ export function TicketCard({ tk, holder, compact, rotKey, onChange }: { tk: Wall
             <div>{tk.recipient?.name && !holder ? tk.recipient.name : holder}</div>
             <div style={{ color: "var(--red-dark)", fontWeight: 600, letterSpacing: ".06em" }}>{tk.code}</div>
             <div className="small">
-              {[meta.covered ? t("youAreMember") : tk.tiers?.note ? tk.tiers.note : kind === "item" ? t("pickup") : "", tk.orders?.total ? `${money(Number(tk.orders.total))}${cur === "LBP" ? ` ≈ ${lbp(Number(tk.orders.total))}` : ""}` : "", protectedOrder ? t("protected") : ""].filter(Boolean).join(" · ")}
+              {[isService(tk) ? `${t("showWithEntry")}${tk.tiers?.note ? ` · ${tk.tiers.note}` : ""}` : meta.covered ? t("youAreMember") : tk.tiers?.note ? tk.tiers.note : "", tk.orders?.total ? `${money(Number(tk.orders.total))}${cur === "LBP" ? ` ≈ ${lbp(Number(tk.orders.total))}` : ""}` : "", protectedOrder ? t("protected") : ""].filter(Boolean).join(" · ")}
             </div>
           </div>
         </div>

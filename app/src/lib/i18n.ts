@@ -265,6 +265,17 @@ const D: Record<string, [string, string]> = {
   kitNote: ["Posters use your cover photo, the listing's price and a QR to the listing. PNGs print at A4 (poster) and 15×15 cm (stand).", "البوسترات بتستعمل صورة الغلاف والسعر و QR للإعلان. PNG بحجم A4 (بوستر) و ١٥×١٥ سم (ستاند)."],
   // v0.6 · intelligence
   copilot: ["Venue copilot", "مساعد المكان"], copilotQ1: ["What should I do this week?", "شو أعمل هالأسبوع؟"], copilotPh: ["Ask about your sales, a listing, a promoter…", "اسأل عن مبيعاتك، إعلان، مروّج…"],
+  // v0.9 · access first — entry before services
+  entryHeading: ["Entry", "الدخول"], onceIn: ["Once you're in", "بعد ما تفوت"], onceInNote: ["Rentals, kits and extras for people inside — pick your entry first.", "تأجير، عدّة وإضافات للي جوّا — اختار الدخول أولاً."],
+  needsEntry: ["Needs an entry", "بدها دخول"], noEntryNeeded: ["No entry needed", "ما بدها دخول"], addEntry: ["Add", "ضيف"], youreIn: ["You already have entry here", "عندك دخول لهون"],
+  admits: ["admits", "بيدخّل"], perPerson: ["per person", "للشخص"], entryIncluded: ["entry included", "الدخول مشمول"], entryNotIncluded: ["entry not included", "الدخول مش مشمول"],
+  entryFirstHint: ["Pick an entry first — services are for people inside.", "اختار الدخول أولاً — الخدمات للي جوّا."],
+  accessRequiredErr: ["Add an entry first — services need access to the venue.", "ضيف الدخول أولاً — الخدمات بدها دخول للمكان."], perPersonErr: ["More than the people entering.", "أكتر من عدد الداخلين."],
+  serviceK: ["PICKUP", "استلام"], serviceNote: ["Hand it over — the person is inside.", "سلّمه — الشخص جوّا."], entryFirstK: ["ENTRY FIRST", "الدخول أولاً"], entryFirstNote: ["Scan their entry before this pickup.", "امسح دخولهم قبل هالاستلام."],
+  usedK: ["USED", "مستعملة"], usedNote: ["One-day pass already used on an earlier day.", "دخول يومي انستعمل بيوم سابق."], people: ["people", "أشخاص"], entries: ["entries", "دخول"], pickups: ["pickups", "استلام"],
+  roleK: ["Role", "الدور"], roleEntry: ["Entry", "دخول"], roleService: ["Service", "خدمة"], admitsK: ["Admits", "بيدخّل"], requiresEntry: ["Needs an entry", "بدها دخول"], perK: ["Per", "لكل"], personK: ["person", "شخص"],
+  passVenues: ["Venues this pass covers", "الأماكن يلي بيغطيها الاشتراك"], accessOfferRequired: ["Add an entry offer (ticket, day pass, stay, membership or an entry-inclusive table) or mark the services \"no entry needed\".", "ضيف عرض دخول (تذكرة، دخول يومي، إقامة، اشتراك أو طاولة مع دخول) أو علّم الخدمات \"ما بدها دخول\"."],
+  showWithEntry: ["Show with your entry", "فرجيه مع دخولك"],
 };
 
 export const t = (lang: Lang, key: string) => (D[key] ? D[key][lang === "ar" ? 1 : 0] : key);

@@ -5,9 +5,14 @@ import { t, type Lang } from "./i18n";
 export type Tier = {
   id: string; name: string; name_ar: string | null; face_price: number; capacity: number; sold: number; held: number;
   kind: OfferKind; member_free: boolean; plan_months: number | null; per_order_limit: number; note: string | null; sort: number;
+  /** v6 access first: an entry offer admits people; a service is consumed inside and needs an entrance (unless requires_access is off) */
+  role?: "access" | "service"; admits?: number; requires_access?: boolean; per?: "order" | "person";
 };
-export type Table = { id: string; name: string; name_ar: string | null; seats: number; min_spend: number; deposit: number; reserved_by_order: string | null; packages?: { id: string; name: string; name_ar?: string; price: number; desc?: string }[] };
-export type AddonOption = { id: string; name: string; name_ar?: string | null; price: number; per: "order" | "ticket"; max?: number };
+export type Table = { id: string; name: string; name_ar: string | null; seats: number; min_spend: number; deposit: number; reserved_by_order: string | null; includes_entry?: boolean; packages?: { id: string; name: string; name_ar?: string; price: number; desc?: string }[] };
+export type AddonOption = { id: string; name: string; name_ar?: string | null; price: number; per: "order" | "ticket"; max?: number; requires_access?: boolean };
+/** Entry or service — legacy rows without a role: items are services, everything else is an entry. */
+export const roleOf = (x: { role?: "access" | "service"; kind: OfferKind }): "access" | "service" => x.role ?? (x.kind === "item" ? "service" : "access");
+export const isAccess = (x: { role?: "access" | "service"; kind: OfferKind }) => roleOf(x) === "access";
 export type Deal = { id: string; name: string; name_ar?: string; member_only?: boolean };
 export type Venue = { id?: string; name: string; name_ar: string | null; city: string; city_ar: string | null; address?: string | null; address_ar?: string | null; lat?: number | null; lng?: number | null };
 export type Listing = {
@@ -19,7 +24,7 @@ export type Listing = {
 };
 
 export const LIST_SELECT =
-  "id,slug,title,title_ar,category,kind,starts_at,ends_at,doors_at,status,featured_until,cover_url,credit,deals,addon_options,pinned,pinned_ar,venues(id,name,name_ar,city,city_ar,address,address_ar,lat,lng),tiers(id,name,name_ar,face_price,capacity,sold,held,kind,member_free,plan_months,per_order_limit,note,sort),tables_vip(id,name,name_ar,seats,min_spend,deposit,reserved_by_order,packages)";
+  "id,slug,title,title_ar,category,kind,starts_at,ends_at,doors_at,status,featured_until,cover_url,credit,deals,addon_options,pinned,pinned_ar,venues(id,name,name_ar,city,city_ar,address,address_ar,lat,lng),tiers(id,name,name_ar,face_price,capacity,sold,held,kind,member_free,plan_months,per_order_limit,note,sort,role,admits,requires_access,per),tables_vip(id,name,name_ar,seats,min_spend,deposit,reserved_by_order,includes_entry,packages)";
 
 export const isFeatured = (l: Listing, now = new Date()) => !!l.featured_until && new Date(l.featured_until) > now;
 export const left = (x: Tier) => Math.max(0, x.capacity - x.sold - x.held);
@@ -28,7 +33,9 @@ export const openTables = (l: Listing) => (l.tables_vip ?? []).filter((x) => !x.
 /** The offer type shown on the card badge: the first sellable thing. */
 export function badgeKind(l: Listing): OfferKind {
   if (l.kind === "pass") return "pass";
-  const tiers = [...l.tiers].sort((a, b) => a.sort - b.sort);
+  // the badge and the "from" price come from entry offers — a towel kit is never the price of a beach day
+  const entries = [...l.tiers].filter(isAccess).sort((a, b) => a.sort - b.sort);
+  const tiers = entries.length ? entries : [...l.tiers].sort((a, b) => a.sort - b.sort);
   if (l.kind === "venue" && openTables(l).length && !tiers.some((x) => x.kind === "daypass")) return "table";
   return tiers[0]?.kind ?? (openTables(l).length ? "table" : l.deals?.length ? "deal" : "ticket");
 }
@@ -36,7 +43,8 @@ export function badgeKind(l: Listing): OfferKind {
 /** Lowest all-in price line for a card: "From $26", "$89 / month", "$95 / night", "Free", "Book". */
 export function lowest(l: Listing, lang: Lang): string {
   const primary = badgeKind(l);
-  const avail = l.tiers.filter((x) => left(x) > 0 || x.kind === "pass");
+  const entries = l.tiers.filter(isAccess);
+  const avail = (entries.length ? entries : l.tiers).filter((x) => left(x) > 0 || x.kind === "pass");
   if (primary === "table") return t(lang, "book");
   const tiers = avail.some((x) => x.kind === primary) ? avail.filter((x) => x.kind === primary) : avail;
   if (!tiers.length) {

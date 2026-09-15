@@ -7,7 +7,7 @@ import { sb } from "@/lib/supabase-browser";
 import { useToast } from "@/components/Toast";
 import { allInKind, unitFee, money, lbp, type OfferKind } from "@/lib/config";
 import { useLang, useT, useCur } from "@/lib/lang";
-import { left as leftOf, type Tier, type Table, type Deal, type AddonOption } from "@/lib/catalogue";
+import { left as leftOf, isAccess, type Tier, type Table, type Deal, type AddonOption } from "@/lib/catalogue";
 import CalendarSheet from "@/components/CalendarSheet";
 import { useConfig } from "@/components/Config";
 
@@ -27,7 +27,7 @@ const SLOTS = ["19:00", "19:30", "20:00", "20:30", "21:00", "21:30", "22:00"];
 const nextFriday = () => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7)); return d.toISOString().slice(0, 10); };
 
 /** Offer pickers by type (brief §5.4). Pickers change shape by type; nothing else does. The cart lives in sessionStorage until checkout. */
-export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: dealsIn, addons: addonsIn = [], preset }: { listing: Cart["listing"] & { status: string; organiser: string; organiserWa?: string | null }; tiers: Tier[]; tables: Table[]; deals: Deal[]; addons?: AddonOption[]; preset?: { tier: string; qty: number } }) {
+export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: dealsIn, addons: addonsIn = [], preset }: { listing: Cart["listing"] & { status: string; organiser: string; organiserWa?: string | null }; tiers: Tier[]; tables: Table[]; deals: Deal[]; addons?: AddonOption[]; preset?: { tier: string; qty: number; entry?: string } }) {
   const t = useT();
   const lang = useLang();
   const { features } = useConfig();
@@ -39,7 +39,14 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
   const toast = useToast();
   const router = useRouter();
   // a WhatsApp concierge link (?tier=&qty=) arrives with the offer preselected
-  const [qty, setQty] = useState<Record<string, number>>(() => (preset && tiers.some((t) => t.id === preset.tier) ? { [preset.tier]: Math.min(preset.qty, tiers.find((t) => t.id === preset.tier)?.per_order_limit || 6) } : {}));
+  // a WhatsApp concierge link (?tier=&qty=&entry=) arrives with the offer preselected — and its entrance beside it (access first, v6)
+  const [qty, setQty] = useState<Record<string, number>>(() => {
+    if (!preset || !tiers.some((t) => t.id === preset.tier)) return {};
+    const out: Record<string, number> = { [preset.tier]: Math.min(preset.qty, tiers.find((t) => t.id === preset.tier)?.per_order_limit || 6) };
+    const e = preset.entry ? tiers.find((t) => t.id === preset.entry && isAccess(t)) : null;
+    if (e) out[e.id] = Math.min(preset.qty, e.per_order_limit || 6);
+    return out;
+  });
   const [group, setGroup] = useState<Record<string, boolean>>({});
   const [plan, setPlan] = useState<string | null>(null);
   const [tableId, setTableId] = useState<string | null>(null);
@@ -52,6 +59,7 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [user, setUser] = useState<User | null>(null);
   const [hasPass, setHasPass] = useState(false);
+  const [heldAccess, setHeldAccess] = useState(0); // people the buyer can already bring in here (tickets, day pass today, stay, membership)
   const [notify, setNotify] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [ref, setRef] = useState("");
@@ -63,12 +71,14 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
     sb().auth.getUser().then(async ({ data }) => {
       setUser(data.user);
       if (!data.user) return;
-      const [{ data: pass }, { data: wl }, { data: sd }] = await Promise.all([
-        sb().from("tickets").select("id,valid_until,tiers!inner(kind)").eq("holder_id", data.user.id).in("state", ["valid", "scanned"]).eq("tiers.kind", "pass"),
+      const [{ data: pass }, { data: held }, { data: wl }, { data: sd }] = await Promise.all([
+        sb().rpc("my_pass_covers", { p_event: listing.id }),
+        sb().rpc("my_access", { p_event: listing.id }),
         sb().from("waitlist").select("tier_id").eq("user_id", data.user.id),
         sb().from("saved_deals").select("deal_id").eq("user_id", data.user.id).eq("event_id", listing.id),
       ]);
-      setHasPass((pass ?? []).some((p: any) => !p.valid_until || new Date(p.valid_until) > new Date()));
+      setHasPass(!!pass);
+      setHeldAccess(Number(held ?? 0));
       setNotify(Object.fromEntries((wl ?? []).map((w: any) => [w.tier_id, true])));
       setSaved(Object.fromEntries((sd ?? []).map((s: any) => [s.deal_id, true])));
     });
@@ -76,8 +86,9 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
 
   const passTiers = tiers.filter((x) => x.kind === "pass");
   const otherTiers = tiers.filter((x) => x.kind !== "pass");
-  const mainTiers = otherTiers.filter((x) => x.kind !== "item");
-  const itemTiers = otherTiers.filter((x) => x.kind === "item");
+  // Access first (v6): entry offers admit people; services are for people inside
+  const mainTiers = otherTiers.filter(isAccess);
+  const itemTiers = otherTiers.filter((x) => !isAccess(x));
   const table = tables.find((x) => x.id === tableId) ?? null;
 
   const lines: CartLine[] = useMemo(() => {
@@ -98,17 +109,27 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
 
   const count = lines.reduce((a, l) => a + (l.kind === "stay" ? 1 : l.qty), 0);
   const pkgRow = table && pkg ? (table.packages ?? []).find((p) => p.id === pkg) ?? null : null;
-  // add-ons (fast lane, parking…): per-ticket ones follow the ticket count, per-order ones are a quantity the buyer picks
-  const ticketCount = lines.filter((l) => ["ticket", "daypass", "item"].includes(l.kind)).reduce((a, l) => a + l.qty, 0);
-  const cartAddons: CartAddon[] = addonsIn.filter((a) => (addonQty[a.id] ?? 0) > 0).map((a) => ({ id: a.id, name: lang === "ar" && a.name_ar ? a.name_ar : a.name, qty: a.per === "ticket" ? Math.min(ticketCount, addonQty[a.id] ?? 0) : addonQty[a.id] ?? 0, unit: Number(a.price), per: a.per })).filter((a) => a.qty > 0);
+  // people this order lets in: entry lines × admits, plus the table's party when the table includes entry
+  const tableEntry = !!table && table.includes_entry !== false;
+  const admittedInCart = lines.reduce((a, l) => { const x = tiers.find((y) => y.id === l.tier_id); return a + (x && isAccess(x) ? Number(x.admits ?? 1) * l.qty : 0); }, 0) + (tableEntry ? Math.max(1, party ?? table!.seats ?? 1) : 0);
+  const headcount = admittedInCart || heldAccess;
+  const inside = headcount > 0;
+  const needsEntry = (x: { requires_access?: boolean }) => x.requires_access !== false;
+  const cheapestEntry = [...mainTiers].filter((x) => leftOf(x) > 0 && !(qty[x.id] ?? 0)).sort((a, b) => Number(a.face_price) - Number(b.face_price))[0] ?? null;
+  // add-ons (fast lane, parking…): per-ticket ones follow the headcount, per-order ones are a quantity the buyer picks
+  const ticketCount = headcount;
+  const cartAddons: CartAddon[] = addonsIn.filter((a) => (addonQty[a.id] ?? 0) > 0 && (inside || !needsEntry(a))).map((a) => ({ id: a.id, name: lang === "ar" && a.name_ar ? a.name_ar : a.name, qty: a.per === "ticket" ? Math.min(ticketCount, addonQty[a.id] ?? 0) : addonQty[a.id] ?? 0, unit: Number(a.price), per: a.per })).filter((a) => a.qty > 0);
   const addonTotal = cartAddons.reduce((a, x) => a + x.qty * x.unit, 0);
   const total = lines.reduce((a, l) => a + (l.unit + l.fee) * l.qty, 0) + (table ? Number(table.deposit) + Number(pkgRow?.price ?? 0) : 0) + addonTotal;
   const tableReady = !!table && (!table.seats || !!party) && !!time;
-  const canBook = lines.length > 0 || tableReady;
+  const serviceWithoutEntry = !inside && (lines.some((l) => { const x = tiers.find((y) => y.id === l.tier_id); return x && !isAccess(x) && needsEntry(x); }) || (tableReady && !tableEntry));
+  const canBook = (lines.length > 0 || tableReady) && !serviceWithoutEntry;
   const giftable = features.gifts && lines.some((l) => ["ticket", "daypass", "item"].includes(l.kind));
 
   const bump = (x: Tier, d: number) => {
-    const max = Math.min(x.per_order_limit || 6, leftOf(x));
+    const service = !isAccess(x) && needsEntry(x);
+    if (service && !inside && d > 0) { toast(t("entryFirstHint")); return; }
+    const max = Math.min(x.per_order_limit || 6, leftOf(x), service && x.per === "person" ? headcount : Infinity);
     const next = (qty[x.id] ?? 0) + d;
     if (next > max) { toast(`${t("limitHit")} (${max}). ${t("groupBooking")} ↓`); setGroup((g) => ({ ...g, [x.id]: true })); return; }
     setQty((s) => ({ ...s, [x.id]: Math.max(0, next) }));
@@ -155,8 +176,10 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
         const soldOut = left <= 0;
         const covered = x.member_free && hasPass;
         const q = qty[x.id] ?? 0;
-        const max = Math.min(x.per_order_limit || 6, left);
-        const unitLabel = x.kind === "stay" ? t("perNight") : "";
+        const service = !isAccess(x);
+        const gated = service && needsEntry(x) && !inside;
+        const max = Math.min(x.per_order_limit || 6, left, service && needsEntry(x) && x.per === "person" ? headcount : Infinity);
+        const unitLabel = x.kind === "stay" ? t("perNight") : service && x.per === "person" ? t("perPerson") : "";
         return (
           <div key={x.id} className={`offer ${sel(x) ? "sel" : ""} ${soldOut ? "sold" : ""}`}>
             <div className="row" style={{ alignItems: "flex-start" }}>
@@ -167,7 +190,13 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
                   {!covered && Number(x.face_price) > 0 && x.kind !== "stay" ? <span className="small"> {t("allIn")}</span> : null}
                   {left < 50 && x.capacity < 5000 && <> · <span style={{ color: soldOut ? "var(--red-dark)" : "var(--ink2)" }}>{soldOut ? t("soldOut") : `${left} ${t(x.kind === "stay" ? "rooms" : "left")}`}</span></>}
                   {x.member_free && !covered && <> · <span style={{ color: "var(--g1)" }}>{t("membersFree")}</span></>}
+                  {!service && Number(x.admits ?? 1) > 1 && <> · <span style={{ color: "var(--g1)" }}>{t("admits")} {x.admits}</span></>}
+                  {service && !needsEntry(x) && <> · <span className="small">{t("noEntryNeeded")}</span></>}
                 </div>
+                {gated && cheapestEntry && (
+                  <button className="btn xs line" style={{ marginTop: 6 }} onClick={() => setQty((s) => ({ ...s, [cheapestEntry.id]: 1 }))}>{t("needsEntry")} · {t("addEntry")} {name(cheapestEntry)} · {money(allInKind(cheapestEntry.kind, Number(cheapestEntry.face_price)))}</button>
+                )}
+                {gated && !cheapestEntry && <div className="small" style={{ marginTop: 4, color: "var(--red-dark)" }}>{t("needsEntry")}</div>}
                 {x.note && <div className="small" style={{ marginTop: 2 }}>{x.note}</div>}
                 {!soldOut && x.kind !== "stay" && <div className="small" style={{ marginTop: 4 }}>{t("maxPer")}: {x.per_order_limit || 6}</div>}
                 {x.kind === "stay" && (
@@ -190,7 +219,7 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
                 <div className="qty">
                   <button onClick={() => bump(x, -1)} aria-label="Fewer" disabled={!q}>−</button>
                   <span className="num">{q}</span>
-                  <button className="plus" onClick={() => bump(x, 1)} aria-label="More" disabled={q >= max && !group[x.id]}>+</button>
+                  <button className="plus" onClick={() => bump(x, 1)} aria-label="More" disabled={gated || (q >= max && !group[x.id])}>+</button>
                 </div>
               )}
             </div>
@@ -203,7 +232,8 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
       <h2 style={{ margin: "4px 0 0" }}>{t("offersHere")}</h2>
       {ended && <p className="small">{t("ended")}</p>}
 
-      {[...mainTiers, ...(tables.length ? [] : itemTiers)].map(renderTier)}
+      {(mainTiers.length > 0 && (itemTiers.length > 0 || tables.length > 0)) && <div className="small" style={{ margin: "8px 0 2px", fontWeight: 600 }}>{t("entryHeading")}</div>}
+      {mainTiers.map(renderTier)}
 
       {passTiers.length > 0 && (
         <div className={`offer pass ${plan ? "sel" : ""}`}>
@@ -230,6 +260,7 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
                 <div className="meta">
                   {x.seats} {t("seats")} · {Number(x.deposit) ? `${money(Number(x.deposit))} ${t("deposit")}` : t("noBookingFee")}
                   {Number(x.min_spend) ? ` · ${money(Number(x.min_spend))} ${t("minSpend")}` : ""}
+                  {mainTiers.length > 0 ? ` · ${t(x.includes_entry === false ? "entryNotIncluded" : "entryIncluded")}` : ""}
                 </div>
               </div>
               <span className="tag">{t("table")}</span>
@@ -253,7 +284,13 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
         );
       })}
 
-      {tables.length > 0 && itemTiers.map((x) => renderTier(x))}
+      {itemTiers.length > 0 && (
+        <>
+          <div className="small" style={{ margin: "10px 0 2px", fontWeight: 600 }}>{t("onceIn")}</div>
+          <div className="small" style={{ marginBottom: 6, color: inside ? "var(--g1)" : "var(--ink2)" }}>{inside ? (admittedInCart ? `${headcount} ${t("people")}` : `✓ ${t("youreIn")}`) : t("onceInNote")}</div>
+          {itemTiers.map((x) => renderTier(x))}
+        </>
+      )}
 
       {deals.map((d) => (
         <div key={d.id} className="offer" style={{ borderStyle: "dashed" }}>
@@ -270,8 +307,10 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
       {addonsIn.length > 0 && (lines.length > 0 || table) && (
         <div className="offer" style={{ background: "var(--sand)", borderColor: "var(--sand)" }}>
           <div className="title" style={{ fontSize: 14, marginBottom: 4 }}>⚡ {t("addonsPick")}</div>
+          {!inside && addonsIn.some(needsEntry) && <div className="small" style={{ marginBottom: 4 }}>{t("entryFirstHint")}</div>}
           {addonsIn.map((a) => {
-            const max = a.per === "ticket" ? Math.max(0, ticketCount) : Math.max(1, Number(a.max ?? 4));
+            const gatedA = needsEntry(a) && !inside;
+            const max = gatedA ? 0 : a.per === "ticket" ? Math.max(0, ticketCount) : Math.max(1, Number(a.max ?? 4));
             const q = Math.min(addonQty[a.id] ?? 0, max);
             return (
               <div key={a.id} className="row" style={{ padding: "6px 0" }}>
@@ -298,6 +337,7 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
         </div>
       )}
 
+      {serviceWithoutEntry && <p className="small" style={{ margin: "12px 0 0", color: "var(--red-dark)" }}>{t("entryFirstHint")}</p>}
       {canBook && (
         <>
           <p className="small" style={{ margin: "12px 0 10px" }}>

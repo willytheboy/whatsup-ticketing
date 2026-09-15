@@ -10,7 +10,7 @@ import { useLang, useT } from "@/lib/lang";
 import { unitFee } from "@/lib/config";
 import type { Cart } from "../e/[slug]/OfferPicker";
 
-type CartHint = { slug: string; tier_id: string; name: string; qty: number; kind: string };
+type CartHint = { slug: string; tier_id: string; name: string; qty: number; kind: string; entry_id?: string | null; entry_name?: string | null };
 type Bubble = { who: "me" | "bot" | "think"; text: string; open?: { slug: string; title: string } | null; cart?: CartHint | null };
 
 /** Ask (brief §5.8): the concierge. Opening line scoped to the city, quick chips, action chips after every answer. */
@@ -63,7 +63,10 @@ function Ask() {
     const tier = r?.tiers?.find((x: any) => x.id === c.tier_id);
     if (!r || !tier) return router.push(`/e/${c.slug}`);
     const face = Number(tier.face_price);
-    const cart: Cart = { listing: { id: r.id, slug: r.slug, title: r.title, kind: r.kind }, lines: [{ tier_id: tier.id, name: tier.name, kind: tier.kind, qty: c.qty, face, unit: face, fee: unitFee(tier.kind, face), covered: false, note: tier.note ?? null, plan_months: tier.plan_months ?? null }], table: null, gift: null, method: "card", checkin: null };
+    const lineOf = (x: any, qty: number) => ({ tier_id: x.id, name: x.name, kind: x.kind, qty, face: Number(x.face_price), unit: Number(x.face_price), fee: unitFee(x.kind, Number(x.face_price)), covered: false, note: x.note ?? null, plan_months: x.plan_months ?? null });
+    // a service comes with its entrance (access first, v6)
+    const entry = c.entry_id ? r.tiers.find((x: any) => x.id === c.entry_id) : null;
+    const cart: Cart = { listing: { id: r.id, slug: r.slug, title: r.title, kind: r.kind }, lines: [...(entry ? [lineOf(entry, c.qty)] : []), { tier_id: tier.id, name: tier.name, kind: tier.kind, qty: c.qty, face, unit: face, fee: unitFee(tier.kind, face), covered: false, note: tier.note ?? null, plan_months: tier.plan_months ?? null }], table: null, gift: null, method: "card", checkin: null };
     sessionStorage.setItem("wu-cart", JSON.stringify(cart));
     router.push("/checkout");
   };
@@ -91,7 +94,7 @@ function Ask() {
             )}
             {b.who === "bot" && i > 0 && (
               <div className="acts">
-                {b.cart && <button className="red" onClick={() => toCheckout(b.cart!, b.open?.title ?? "")}>🛒 {t("checkout")} · {b.cart.qty} × {b.cart.name}</button>}
+                {b.cart && <button className="red" onClick={() => toCheckout(b.cart!, b.open?.title ?? "")}>🛒 {t("checkout")} · {b.cart.qty} × {b.cart.name}{b.cart.entry_name ? ` + ${b.cart.qty} × ${b.cart.entry_name}` : ""}</button>}
                 {b.open && <Link href={`/e/${b.open.slug}`} className={b.cart ? "" : "red"}>{t("open")}: {b.open.title}</Link>}
                 <a href={waLink()} target="_blank" rel="noopener" onClick={() => toast(t("waCont"))}>{t("onWa")}</a>
               </div>

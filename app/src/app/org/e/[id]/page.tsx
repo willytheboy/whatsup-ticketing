@@ -18,11 +18,13 @@ const toLocal = (iso: string | null) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 const fromLocal = (v: string | null | undefined) => (v ? new Date(v).toISOString() : null);
-type Tier = { id?: string; name: string; name_ar?: string | null; kind: OfferKind; face_price: number | string; capacity: number | string; sold: number; held: number; per_order_limit: number | string; sale_starts?: string | null; sale_ends?: string | null; member_free?: boolean; plan_months?: number | string | null; note?: string | null; sort?: number; _del?: boolean };
+type Tier = { id?: string; name: string; name_ar?: string | null; kind: OfferKind; face_price: number | string; capacity: number | string; sold: number; held: number; per_order_limit: number | string; sale_starts?: string | null; sale_ends?: string | null; member_free?: boolean; plan_months?: number | string | null; note?: string | null; sort?: number; _del?: boolean; role?: "access" | "service"; admits?: number | string; requires_access?: boolean; per?: "order" | "person" };
 type Pkg = { id: string; name: string; name_ar?: string; price: number | string; desc?: string };
-type Table = { id?: string; name: string; name_ar?: string | null; seats: number | string; min_spend: number | string; deposit: number | string; reserved_by_order?: string | null; packages: Pkg[]; _del?: boolean };
+type Table = { id?: string; name: string; name_ar?: string | null; seats: number | string; min_spend: number | string; deposit: number | string; reserved_by_order?: string | null; packages: Pkg[]; _del?: boolean; includes_entry?: boolean };
 type Deal = { id: string; name: string; name_ar?: string; member_only?: boolean };
-type Addon = { id: string; name: string; name_ar?: string; price: number | string; per: "order" | "ticket"; max?: number | string };
+type Addon = { id: string; name: string; name_ar?: string; price: number | string; per: "order" | "ticket"; max?: number | string; requires_access?: boolean };
+/** Access first (v6): entries admit people, services are consumed inside and need an entrance unless switched off. */
+const roleFor = (x: Tier): "access" | "service" => x.role ?? (x.kind === "item" ? "service" : "access");
 type Refund = { id: string; buyer: string | null; buyer_phone: string | null; total: number; payment_method: string; refund_status: string; refund_requested_at: string; addons: any[] };
 const KINDS: OfferKind[] = ["ticket", "daypass", "item", "stay", "pass", "table"];
 const LKINDS = ["event", "venue", "stay", "pass"];
@@ -124,26 +126,30 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
       if (venue.id) await sb().from("venues").update(row).eq("id", venue.id);
       else { const { data: nv } = await sb().from("venues").insert(row).select("id").single(); venueId = nv?.id ?? venueId; if (nv) setVenue({ ...venue, id: nv.id }); }
     }
-    const { error } = await sb().from("events").update({
-      title: ev.title.trim(), title_ar: ev.title_ar || null, description: ev.description || null, description_ar: ev.description_ar || null,
-      category: ev.category, kind: ev.kind, starts_at: fromLocal(ev.starts_at), doors_at: fromLocal(ev.doors_at), ends_at: fromLocal(ev.ends_at), status: ev.status,
-      pinned: ev.pinned || null, pinned_ar: ev.pinned_ar || null, credit: ev.credit || null, refund_policy: ev.refund_policy ?? { type: "until_hours_before", hours: 24 }, seated: !!ev.seated,
-      deals: deals.filter((d) => d.name?.trim()).map((d) => ({ ...d, id: d.id || rid() })), venue_id: venueId || null,
-      addon_options: addons.filter((a) => a.name?.trim()).map((a) => ({ id: a.id || rid(), name: a.name.trim(), name_ar: a.name_ar || null, price: Math.max(0, +a.price || 0), per: a.per === "ticket" ? "ticket" : "order", max: Math.max(1, +(a.max ?? 4) || 4) })),
-    }).eq("id", ev.id);
-    if (error) { setBusy(false); return setErr(error.message); }
+    // offers first, then the listing row: publishing checks that services have an entry offer beside them (access first, v6)
     for (const [i, x] of tiers.entries()) {
-      const row = { name: (x.name ?? "").trim(), name_ar: x.name_ar || null, kind: x.kind, face_price: +x.face_price || 0, capacity: Math.max(+x.capacity || 0, (x.sold ?? 0) + (x.held ?? 0)), per_order_limit: +x.per_order_limit || (x.kind === "pass" ? 1 : 6), sale_starts: fromLocal(x.sale_starts), sale_ends: fromLocal(x.sale_ends), member_free: !!x.member_free, plan_months: x.kind === "pass" ? Number(x.plan_months || 1) : null, note: x.note || null, sort: i };
+      const role = roleFor(x);
+      const row = { name: (x.name ?? "").trim(), name_ar: x.name_ar || null, kind: x.kind, face_price: +x.face_price || 0, capacity: Math.max(+x.capacity || 0, (x.sold ?? 0) + (x.held ?? 0)), per_order_limit: +x.per_order_limit || (x.kind === "pass" ? 1 : 6), sale_starts: fromLocal(x.sale_starts), sale_ends: fromLocal(x.sale_ends), member_free: !!x.member_free, plan_months: x.kind === "pass" ? Number(x.plan_months || 1) : null, note: x.note || null, sort: i,
+        role, admits: role === "access" ? Math.max(1, Math.floor(+(x.admits ?? 1) || 1)) : 1, requires_access: role === "service" ? x.requires_access !== false : true, per: role === "service" && x.per === "person" ? "person" : "order" };
       if (x._del && x.id) { if (!x.sold && !x.held) await sb().from("tiers").delete().eq("id", x.id); continue; }
       if (x.id) await sb().from("tiers").update(row).eq("id", x.id);
       else if (row.name) await sb().from("tiers").insert({ event_id: ev.id, ...row });
     }
     for (const x of tables) {
-      const row = { name: (x.name ?? "").trim(), name_ar: x.name_ar || null, seats: +x.seats || 4, min_spend: +x.min_spend || 0, deposit: +x.deposit || 0, packages: (x.packages ?? []).filter((p) => p.name?.trim()).map((p) => ({ ...p, id: p.id || rid(), price: +p.price || 0 })) };
+      const row = { name: (x.name ?? "").trim(), name_ar: x.name_ar || null, seats: +x.seats || 4, min_spend: +x.min_spend || 0, deposit: +x.deposit || 0, includes_entry: x.includes_entry !== false, packages: (x.packages ?? []).filter((p) => p.name?.trim()).map((p) => ({ ...p, id: p.id || rid(), price: +p.price || 0 })) };
       if (x._del && x.id) { if (!x.reserved_by_order) await sb().from("tables_vip").delete().eq("id", x.id); continue; }
       if (x.id) await sb().from("tables_vip").update(row).eq("id", x.id);
       else if (row.name) await sb().from("tables_vip").insert({ event_id: ev.id, ...row });
     }
+    const { error } = await sb().from("events").update({
+      title: ev.title.trim(), title_ar: ev.title_ar || null, description: ev.description || null, description_ar: ev.description_ar || null,
+      category: ev.category, kind: ev.kind, starts_at: fromLocal(ev.starts_at), doors_at: fromLocal(ev.doors_at), ends_at: fromLocal(ev.ends_at), status: ev.status,
+      pinned: ev.pinned || null, pinned_ar: ev.pinned_ar || null, credit: ev.credit || null, refund_policy: ev.refund_policy ?? { type: "until_hours_before", hours: 24 }, seated: !!ev.seated,
+      deals: deals.filter((d) => d.name?.trim()).map((d) => ({ ...d, id: d.id || rid() })), venue_id: venueId || null,
+      pass_venue_ids: ev.kind === "pass" ? (Array.isArray(ev.pass_venue_ids) && ev.pass_venue_ids.length ? ev.pass_venue_ids : venueId ? [venueId] : null) : null,
+      addon_options: addons.filter((a) => a.name?.trim()).map((a) => ({ id: a.id || rid(), name: a.name.trim(), name_ar: a.name_ar || null, price: Math.max(0, +a.price || 0), per: a.per === "ticket" ? "ticket" : "order", max: Math.max(1, +(a.max ?? 4) || 4), requires_access: a.requires_access !== false })),
+    }).eq("id", ev.id);
+    if (error) { setBusy(false); return setErr(error.message.includes("access_offer_required") ? t("accessOfferRequired") : error.message); }
     setBusy(false);
     toast(t("savedOk"));
     load();
@@ -173,8 +179,8 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
       starts_at: fromLocal(ev.starts_at), doors_at: fromLocal(ev.doors_at), ends_at: fromLocal(ev.ends_at), status: "draft", seated: ev.seated, refund_policy: ev.refund_policy, pinned: ev.pinned, pinned_ar: ev.pinned_ar, deals, cover_url: ev.cover_url,
     }).select("id").single();
     if (error || !data) { setBusy(false); return setErr(error?.message ?? "copy"); }
-    if (tiers.some((x) => x.id)) await sb().from("tiers").insert(tiers.filter((x) => x.id && !x._del).map((x, i) => ({ event_id: data.id, name: x.name, name_ar: x.name_ar, kind: x.kind, face_price: +x.face_price || 0, capacity: +x.capacity || 0, per_order_limit: +x.per_order_limit || 6, member_free: !!x.member_free, plan_months: x.plan_months || null, note: x.note || null, sort: i })));
-    if (tables.some((x) => x.id)) await sb().from("tables_vip").insert(tables.filter((x) => x.id && !x._del).map((x) => ({ event_id: data.id, name: x.name, name_ar: x.name_ar, seats: +x.seats || 4, min_spend: +x.min_spend || 0, deposit: +x.deposit || 0, packages: x.packages })));
+    if (tiers.some((x) => x.id)) await sb().from("tiers").insert(tiers.filter((x) => x.id && !x._del).map((x, i) => ({ event_id: data.id, name: x.name, name_ar: x.name_ar, kind: x.kind, face_price: +x.face_price || 0, capacity: +x.capacity || 0, per_order_limit: +x.per_order_limit || 6, member_free: !!x.member_free, plan_months: x.plan_months || null, note: x.note || null, sort: i, role: roleFor(x), admits: Math.max(1, +(x.admits ?? 1) || 1), requires_access: x.requires_access !== false, per: x.per === "person" ? "person" : "order" })));
+    if (tables.some((x) => x.id)) await sb().from("tables_vip").insert(tables.filter((x) => x.id && !x._del).map((x) => ({ event_id: data.id, name: x.name, name_ar: x.name_ar, seats: +x.seats || 4, min_spend: +x.min_spend || 0, deposit: +x.deposit || 0, includes_entry: x.includes_entry !== false, packages: x.packages })));
     router.push(`/org/e/${data.id}`);
   };
   const archive = async () => { setBusy(true); await sb().from("events").update({ status: "archived" }).eq("id", ev.id); router.replace("/org"); };
@@ -237,6 +243,16 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
               <div className="eyebrow">{t("venue")}</div>
               <div className="field"><select aria-label={t("venue")} value={venue?.id ?? ""} onChange={(e) => { const v = venues.find((x) => x.id === e.target.value); if (v) sb().from("venues").select("*").eq("id", v.id).single().then(({ data }) => { setVenue(data); set("venue_id", v.id); }); else setVenue({ name: "", city: "Beirut" }); }}>
                 <option value="">— {t("newVenue")} —</option>{venues.map((v) => <option key={v.id} value={v.id}>{v.name}, {v.city}</option>)}</select></div>
+              {ev.kind === "pass" && (
+                <div className="stack" style={{ gap: 4 }}>
+                  <div className="lbl">{t("passVenues")}</div>
+                  {venues.map((v) => {
+                    const ids: string[] = Array.isArray(ev.pass_venue_ids) ? ev.pass_venue_ids : venue?.id ? [venue.id] : [];
+                    const on = ids.includes(v.id);
+                    return <label key={v.id} className="row" style={{ justifyContent: "flex-start", gap: 8, fontSize: 13 }}><input type="checkbox" checked={on} onChange={(e) => set("pass_venue_ids", e.target.checked ? [...ids, v.id] : ids.filter((x) => x !== v.id))} /> {v.name}, {v.city}</label>;
+                  })}
+                </div>
+              )}
               <div className="grid2">
                 <label className="field"><span className="lbl">{t("fName")}</span><input value={venue?.name ?? ""} onChange={(e) => setV("name", e.target.value)} /></label>
                 <label className="field"><span className="lbl">{t("fNameAr")}</span><input dir="rtl" value={venue?.name_ar ?? ""} onChange={(e) => setV("name_ar", e.target.value)} /></label>
@@ -279,6 +295,25 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
                 {x.kind === "pass" && <label className="field"><span className="lbl">{t("planMonths")}</span><input inputMode="numeric" value={x.plan_months ?? 1} onChange={(e) => setTier(i, "plan_months", e.target.value)} /></label>}
                 <label className="field"><span className="lbl">{t("tierNote")}</span><input value={x.note ?? ""} onChange={(e) => setTier(i, "note", e.target.value)} placeholder={t("tierNotePh")} /></label>
                 <label className="row" style={{ justifyContent: "flex-start", gap: 8, fontSize: 13 }}><input type="checkbox" checked={!!x.member_free} onChange={(e) => setTier(i, "member_free", e.target.checked)} /> {t("membersFree")}</label>
+                {x.kind !== "pass" && (
+                  <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
+                    <div className="seg" style={{ maxWidth: 220 }}>
+                      <button className={roleFor(x) === "access" ? "on" : ""} onClick={() => setTier(i, "role", "access")}>{t("roleEntry")}</button>
+                      <button className={roleFor(x) === "service" ? "on" : ""} onClick={() => setTier(i, "role", "service")}>{t("roleService")}</button>
+                    </div>
+                    {roleFor(x) === "access" ? (
+                      <label className="field" style={{ maxWidth: 140 }}><span className="lbl">{t("admitsK")} · {t("people")}</span><input inputMode="numeric" value={x.admits ?? 1} onChange={(e) => setTier(i, "admits", e.target.value)} /></label>
+                    ) : (
+                      <>
+                        <label className="row" style={{ justifyContent: "flex-start", gap: 8, fontSize: 13 }}><input type="checkbox" checked={x.requires_access !== false} onChange={(e) => setTier(i, "requires_access", e.target.checked)} /> {t("requiresEntry")}</label>
+                        <div className="seg" style={{ maxWidth: 200 }}>
+                          <button className={(x.per ?? "order") === "order" ? "on" : ""} onClick={() => setTier(i, "per", "order")}>{t("perK")} {t("perOrder")}</button>
+                          <button className={x.per === "person" ? "on" : ""} onClick={() => setTier(i, "per", "person")}>{t("perK")} {t("personK")}</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 <div className="note num">{+x.face_price > 0 ? `${t("buyerSees")} ${money(allInKind(x.kind, +x.face_price))} ${x.kind === "stay" ? t("perNight") : x.kind === "pass" ? t("perMonth") : t("allIn")}` : t("free")}</div>
                 <div className="row" style={{ gap: 8 }}>
                   {!!x.id && <button className="btn xs line" onClick={() => reopen(x)} disabled={busy}>{t("reopenTier")}</button>}
@@ -304,6 +339,7 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
                   <label className="field"><span className="lbl">{t("minSpend")} $</span><input inputMode="decimal" value={x.min_spend} onChange={(e) => setTable(i, "min_spend", e.target.value)} /></label>
                   <label className="field"><span className="lbl">{t("deposit")} $</span><input inputMode="decimal" value={x.deposit} onChange={(e) => setTable(i, "deposit", e.target.value)} /></label>
                 </div>
+                <label className="row" style={{ justifyContent: "flex-start", gap: 8, fontSize: 13 }}><input type="checkbox" checked={x.includes_entry !== false} onChange={(e) => setTable(i, "includes_entry", e.target.checked)} /> {t("entryIncluded")}</label>
                 <div className="eyebrow">{t("packages")}</div>
                 {(x.packages ?? []).map((p, q) => (
                   <div key={p.id} className="grid3 cols3">
@@ -357,6 +393,7 @@ export default function ManageEvent({ params }: { params: { id: string } }) {
                     <button className={a.per === "order" ? "on" : ""} onClick={() => setAddon(i, "per", "order")}>{t("addonPer")} {t("perOrder")}</button>
                     <button className={a.per === "ticket" ? "on" : ""} onClick={() => setAddon(i, "per", "ticket")}>{t("addonPer")} {t("perTicket2")}</button>
                   </div>
+                  <label className="row" style={{ justifyContent: "flex-start", gap: 8, fontSize: 13 }}><input type="checkbox" checked={a.requires_access !== false} onChange={(e) => setAddon(i, "requires_access", e.target.checked)} /> {t("requiresEntry")}</label>
                   <button className="btn xs line" style={{ color: "var(--red-dark)" }} onClick={() => setAddons(addons.filter((_, j) => j !== i))}>{t("remove")}</button>
                 </div>
               </div>

@@ -22,7 +22,9 @@ const NOTIFY_SECRET = Deno.env.get("NOTIFY_SECRET") ?? "";
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY"); const MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-4-6";
 const TENANT = Deno.env.get("TENANT") ?? "lb";
 
-type Tier = { id: string; name: string; name_ar: string | null; face_price: number; capacity: number; sold: number; held: number; kind: string; per_order_limit: number | null; sort: number };
+type Tier = { id: string; name: string; name_ar: string | null; face_price: number; capacity: number; sold: number; held: number; kind: string; per_order_limit: number | null; sort: number; role?: string; admits?: number; requires_access?: boolean };
+// access first (v6): the bot quotes and books entries; a service is offered together with the cheapest entrance
+const isEntry = (t: Tier) => (t.role ?? (t.kind === "item" ? "service" : "access")) === "access";
 type L = { id: string; slug: string; title: string; title_ar: string | null; category: string; kind: string; starts_at: string; status: string; tiers: Tier[]; venues: { name: string; name_ar: string | null; city: string } | null; deals: any[]; tables_vip: any[] };
 
 const FEES: Record<string, [number, number]> = { ticket: [0.05, 0.5], daypass: [0.05, 0], item: [0.05, 0], stay: [0.04, 0], pass: [0, 0], table: [0, 0] };
@@ -31,10 +33,12 @@ const left = (t: Tier) => Math.max(0, Number(t.capacity) - Number(t.sold) - Numb
 const money = (n: number) => (n === 0 ? "free" : `$${n.toFixed(2).replace(/\.00$/, "")}`);
 const when = (iso: string, lang: string) => new Date(iso).toLocaleString(lang === "ar" ? "ar-LB" : "en-GB", { timeZone: "Asia/Beirut", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const title = (l: L, lang: string) => (lang === "ar" && l.title_ar ? l.title_ar : l.title);
-const lowest = (l: L) => l.tiers.filter((t) => t.kind !== "pass" && left(t) > 0).map((t) => allIn(t.kind, Number(t.face_price))).sort((a, b) => a - b)[0];
+const lowest = (l: L) => { const e = l.tiers.filter((t) => t.kind !== "pass" && left(t) > 0 && isEntry(t)); return (e.length ? e : l.tiers.filter((t) => t.kind !== "pass" && left(t) > 0 && t.requires_access === false)).map((t) => allIn(t.kind, Number(t.face_price))).sort((a, b) => a - b)[0]; };
+/** A service tier needs an entrance: pair it with the cheapest entry on sale (null when the service needs none). */
+const entryFor = (l: L, t: Tier): Tier | null => (isEntry(t) || t.requires_access === false ? null : l.tiers.filter((x) => x.kind !== "pass" && left(x) > 0 && isEntry(x)).sort((a, b) => Number(a.face_price) - Number(b.face_price))[0] ?? null);
 
 async function catalogue(db: any, tenantId: string): Promise<L[]> {
-  const { data } = await db.from("events").select("id,slug,title,title_ar,category,kind,starts_at,status,deals,tiers(id,name,name_ar,face_price,capacity,sold,held,kind,per_order_limit,sort),tables_vip(id,name,seats,reserved_by_order),venues(name,name_ar,city)")
+  const { data } = await db.from("events").select("id,slug,title,title_ar,category,kind,starts_at,status,deals,tiers(id,name,name_ar,face_price,capacity,sold,held,kind,per_order_limit,sort,role,admits,requires_access),tables_vip(id,name,seats,reserved_by_order),venues(name,name_ar,city)")
     .eq("tenant_id", tenantId).in("status", ["live", "sold_out"]).or(`kind.neq.event,starts_at.gte.${new Date(Date.now() - 864e5).toISOString()}`).order("starts_at").limit(60);
   return (data ?? []) as L[];
 }
@@ -148,7 +152,7 @@ export async function handleMessage(db: any, tenant: any, phone: string, text: s
   } else if (cart && /^(yes|yeah|ok|okay|sure|go|book it|اي|ايه|أيوه|تمام|اوك|ماشي|يلا)\W*$/i.test(q)) {
     // a bare "yes" after a proposal: repeat the checkout link
     const l = L.find((x) => x.slug === cart.slug);
-    const link = `${APP_URL}/e/${cart.slug}?tier=${cart.tier_id}&qty=${cart.qty}&via=wa`;
+    const link = `${APP_URL}/e/${cart.slug}?tier=${cart.tier_id}&qty=${cart.qty}${cart.entry ? `&entry=${cart.entry.id}` : ""}&via=wa`;
     reply = ar ? `يلا 🎟️ ${cart.qty} × ${cart.name}${l ? ` — ${title(l, lang)}` : ""}. ادفع من هون:\n${link}` : `Let's go 🎟️ ${cart.qty} × ${cart.name}${l ? ` — ${title(l, lang)}` : ""}. Pay here:\n${link}`;
   } else {
     // catalogue answer — Claude phrases it and may propose a booking (BOOK: title | tier | qty); rules otherwise.
@@ -162,7 +166,7 @@ export async function handleMessage(db: any, tenant: any, phone: string, text: s
     const resolve = (t: string) => L.find((l) => l.title.toLowerCase() === t.trim().toLowerCase()) ?? L.find((l) => l.title.toLowerCase().includes(t.trim().toLowerCase().slice(0, 12)));
     if (ai) {
       const bm = ai.match(/BOOK:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(\d+)\s*$/m);
-      if (bm) { const l = resolve(bm[1]); const t = l?.tiers.find((x) => x.name.toLowerCase() === bm[2].trim().toLowerCase() && left(x) > 0) ?? l?.tiers.filter((x) => x.kind !== "pass" && left(x) > 0).sort((a, b) => a.sort - b.sort)[0]; if (l && t) { cart = { slug: l.slug, tier_id: t.id, name: t.name, qty: Math.min(Number(bm[3]) || 1, t.per_order_limit || 6), kind: t.kind }; picks = [l]; } ai = ai.replace(/\n?BOOK:.*$/m, "").trim(); }
+      if (bm) { const l = resolve(bm[1]); const t = l?.tiers.find((x) => x.name.toLowerCase() === bm[2].trim().toLowerCase() && left(x) > 0) ?? l?.tiers.filter((x) => x.kind !== "pass" && left(x) > 0 && isEntry(x)).sort((a, b) => a.sort - b.sort)[0]; if (l && t) { const e = entryFor(l, t); cart = { slug: l.slug, tier_id: t.id, name: t.name, qty: Math.min(Number(bm[3]) || 1, t.per_order_limit || 6), kind: t.kind, entry: e ? { id: e.id, name: e.name, kind: e.kind, face_price: e.face_price } : null }; picks = [l]; } ai = ai.replace(/\n?BOOK:.*$/m, "").trim(); }
       const om = ai.match(/OPEN:\s*(.+)$/m);
       if (om) { const l = resolve(om[1]); if (l) picks = [l]; ai = ai.replace(/\n?OPEN:.*$/m, "").trim(); }
       reply = ai;
@@ -172,15 +176,18 @@ export async function handleMessage(db: any, tenant: any, phone: string, text: s
     }
     const n = qtyIn(q);
     if (!cart && picks[0] && (n || /book|reserve|احجز|بدي|get me|take/i.test(q))) {
-      const t = picks[0].tiers.filter((x) => x.kind !== "pass" && left(x) > 0).sort((a, b) => a.sort - b.sort)[0];
-      if (t) { cart = { slug: picks[0].slug, tier_id: t.id, name: t.name, qty: Math.min(n || 1, t.per_order_limit || 6), kind: t.kind }; picks = [picks[0]]; }
+      const t = picks[0].tiers.filter((x) => x.kind !== "pass" && left(x) > 0 && isEntry(x)).sort((a, b) => a.sort - b.sort)[0];
+      if (t) { cart = { slug: picks[0].slug, tier_id: t.id, name: t.name, qty: Math.min(n || 1, t.per_order_limit || 6), kind: t.kind, entry: null }; picks = [picks[0]]; }
     }
     if (picks.length) reply += "\n" + picks.map((l) => line(l, lang)).join("\n\n");
     if (cart) {
       const l = L.find((x) => x.slug === cart.slug);
       const t = l?.tiers.find((x) => x.id === cart.tier_id);
-      const total = t ? round2(allIn(t.kind, Number(t.face_price)) * cart.qty) : 0;
-      const link = `${APP_URL}/e/${cart.slug}?tier=${cart.tier_id}&qty=${cart.qty}&via=wa`;
+      // a service comes with its entrance: "Kayak needs a day pass — 1 × Sunbed day pass + 1 × Kayak = $36.75 all-in"
+      const e: Tier | null = cart.entry ? (l?.tiers.find((x) => x.id === cart.entry.id) ?? null) : null;
+      const total = t ? round2(allIn(t.kind, Number(t.face_price)) * cart.qty + (e ? allIn(e.kind, Number(e.face_price)) * cart.qty : 0)) : 0;
+      const link = `${APP_URL}/e/${cart.slug}?tier=${cart.tier_id}&qty=${cart.qty}${e ? `&entry=${e.id}` : ""}&via=wa`;
+      if (e) reply += "\n\n" + (ar ? `${cart.name} بدها دخول — بضيفلك ${cart.qty} × ${e.name_ar ?? e.name}.` : `${cart.name} needs an entry — adding ${cart.qty} × ${e.name}.`);
       reply += "\n\n" + (ar ? `${cart.qty} × ${cart.name}${total ? ` = ${money(total)} شامل الرسوم` : ""}. ادفع من هون (بطاقة، Whish، OMT أو كاش عالباب):\n${link}` : `${cart.qty} × ${cart.name}${total ? ` = ${money(total)} all-in` : ""}. Pay here (card, Whish, OMT or cash at the door):\n${link}`);
     }
   }

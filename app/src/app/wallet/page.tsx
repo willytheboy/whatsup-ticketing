@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import TopBar from "@/components/TopBar";
-import { TicketCard, MemberCard, CouponCard, kindOf, isPast, type WalletTicket, type Coupon } from "@/components/TicketCard";
+import { TicketCard, MemberCard, CouponCard, kindOf, isPast, isService, type WalletTicket, type Coupon } from "@/components/TicketCard";
 import { useToast } from "@/components/Toast";
 import { sb } from "@/lib/supabase-browser";
 import { money } from "@/lib/config";
@@ -52,7 +52,8 @@ export default function Wallet() {
 
   const all = rows ?? [];
   const passes = all.filter((r) => kindOf(r) === "pass" && (!r.valid_until || new Date(r.valid_until) > new Date()));
-  const upcoming = all.filter((r) => !passes.includes(r) && !isPast(r) && ["valid", "reserved", "resale", "scanned"].includes(r.state)).sort((a, b) => new Date(a.events?.starts_at ?? 0).getTime() - new Date(b.events?.starts_at ?? 0).getTime());
+  // by date, then entries before the services that go with them (access first, v6)
+  const upcoming = all.filter((r) => !passes.includes(r) && !isPast(r) && ["valid", "reserved", "resale", "scanned"].includes(r.state)).sort((a, b) => (new Date(a.events?.starts_at ?? 0).getTime() - new Date(b.events?.starts_at ?? 0).getTime()) || ((a.events?.id ?? "").localeCompare(b.events?.id ?? "")) || (Number(isService(a)) - Number(isService(b))));
   const past = all.filter((r) => !passes.includes(r) && !upcoming.includes(r));
 
   return (

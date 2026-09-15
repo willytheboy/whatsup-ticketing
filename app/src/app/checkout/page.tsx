@@ -91,6 +91,9 @@ export default function Checkout() {
     if (error || data?.error) {
       const body = await (error as any)?.context?.json?.().catch(() => null);
       const code = body?.error ?? data?.error ?? error?.message;
+      // access first (v6): the server refuses services without an entrance, and per-person services above the headcount
+      if (code === "access_required") { setErr(t("accessRequiredErr")); return; }
+      if (code === "per_person_limit") { setErr(`${t("perPersonErr")} (${body?.max ?? data?.max ?? 0})`); return; }
       setErr(ERRORS[code] ?? `Could not complete: ${code}`);
       return;
     }

@@ -6,10 +6,10 @@ import TopBar from "@/components/TopBar";
 import { useToast } from "@/components/Toast";
 import { sb } from "@/lib/supabase-browser";
 import { useT } from "@/lib/lang";
-import { saveManifest, loadManifest, enqueue, readQueue, clearQueue, offlineCheck, type Manifest } from "@/lib/door";
+import { saveManifest, loadManifest, enqueue, readQueue, clearQueue, offlineCheck, roleOf, admitsOf, type Manifest } from "@/lib/door";
 
 type Ev = { event_id: string; title: string; sold: number; checked_in: number };
-type Scan = { result: string; code?: string; reason?: string; tier?: string; holder?: string; seat?: string | null; at?: string; kind?: string; repeat?: boolean; order_id?: string; deposit?: number | null; party?: number | null; attempts?: number; offline?: boolean; rotating?: boolean; locked?: boolean; addons?: { id: string; name: string; qty: number }[] };
+type Scan = { result: string; code?: string; reason?: string; tier?: string; holder?: string; seat?: string | null; at?: string; kind?: string; role?: string; admits?: number; note?: string | null; repeat?: boolean; order_id?: string; deposit?: number | null; party?: number | null; attempts?: number; offline?: boolean; rotating?: boolean; locked?: boolean; addons?: { id: string; name: string; qty: number }[] };
 
 /** Door check-in (brief §5.12): camera QR via BarcodeDetector, jsQR fallback for iOS Safari, paste, name lookup.
     Works offline from a cached manifest; scans made offline queue and sync when the connection returns. */
@@ -82,8 +82,8 @@ export default function DoorScanner() {
     setRecent((s) => [{ ...r, at: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) }, ...s].slice(0, 30));
     if (r.result === "duplicate") setDupes((n) => n + 1);
     if (r.locked || r.result === "locked") loadLocks(eventId);
-    if (navigator.vibrate) navigator.vibrate(r.result === "valid" ? 80 : [60, 40, 60]);
-    setTimeout(() => { setResult(null); busy.current = false; }, r.result === "reserved" ? 6000 : 2200);
+    if (navigator.vibrate) navigator.vibrate(r.result === "valid" || r.result === "service" ? 80 : [60, 40, 60]);
+    setTimeout(() => { setResult(null); busy.current = false; }, r.result === "reserved" || r.result === "entry_first" ? 6000 : 2200);
   };
   const check = async (tok: string) => {
     tok = tok.trim();
@@ -93,15 +93,15 @@ export default function DoorScanner() {
     busy.current = true;
     if (!navigator.onLine && manifest) {
       const o = offlineCheck(manifest, tok);
-      const r: Scan = { result: o.result, reason: o.reason, code: o.ticket?.code, tier: o.ticket?.tier ?? undefined, holder: o.ticket?.holder ?? undefined, seat: o.ticket?.seat, kind: o.ticket?.kind, offline: true };
-      if (o.ticket && (o.result === "valid" || o.result === "duplicate")) { o.ticket.state = "scanned"; o.ticket.scanned_at = new Date().toISOString(); await saveManifest(eventId, manifest); }
+      const r: Scan = { result: o.result, reason: o.reason, code: o.ticket?.code, tier: o.ticket?.tier ?? undefined, holder: o.ticket?.holder ?? undefined, seat: o.ticket?.seat, kind: o.ticket?.kind, role: o.ticket ? roleOf(o.ticket) : undefined, admits: o.ticket ? admitsOf(o.ticket) : undefined, offline: true };
+      if (o.ticket && (o.result === "valid" || o.result === "service" || o.result === "duplicate")) { o.ticket.state = "scanned"; o.ticket.scanned_at = new Date().toISOString(); await saveManifest(eventId, manifest); }
       await enqueue({ token: tok, at: new Date().toISOString(), result: o.result, code: o.ticket?.code }); setQueued((n) => n + 1);
       return show(r);
     }
     const { data, error } = await sb().functions.invoke("scan", { body: { token: tok, event_id: eventId, device_id: "web-" + navigator.userAgent.slice(0, 20) } });
     if (error && manifest) { setOnline(false); busy.current = false; return check(tok); }
     const r: Scan = data ?? { result: "invalid", reason: error?.message };
-    if (manifest && (r.result === "valid" || r.result === "duplicate")) { const tk = manifest.tickets.find((x) => x.code === r.code); if (tk) { tk.state = "scanned"; tk.scanned_at = new Date().toISOString(); } }
+    if (manifest && (r.result === "valid" || r.result === "service" || r.result === "duplicate")) { const tk = manifest.tickets.find((x) => x.code === r.code); if (tk) { tk.state = "scanned"; tk.scanned_at = new Date().toISOString(); } }
     show(r);
   };
   const collect = async (orderId: string) => {
@@ -156,11 +156,14 @@ export default function DoorScanner() {
     tick();
   };
 
-  const tone = result ? (result.result === "valid" ? "ok" : result.result === "duplicate" ? "dup" : "bad") : "";
+  const tone = result ? (result.result === "valid" || result.result === "service" ? "ok" : result.result === "duplicate" || result.result === "entry_first" ? "dup" : "bad") : "";
   useEffect(() => { loadLocks(eventId); }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
   const ev = events.find((e) => e.event_id === eventId);
-  const scannedNow = manifest ? manifest.tickets.filter((x) => x.state === "scanned").length : ev?.checked_in ?? 0;
-  const soldNow = manifest ? manifest.tickets.filter((x) => x.state !== "reserved").length : ev?.sold ?? 0;
+  // people through the door: entries × admits; service QRs are pickups and never count (access first, v6)
+  const scannedNow = manifest ? manifest.tickets.filter((x) => x.state === "scanned" && roleOf(x) === "access").reduce((a, x) => a + admitsOf(x), 0) : ev?.checked_in ?? 0;
+  const soldNow = manifest ? manifest.tickets.filter((x) => x.state !== "reserved" && roleOf(x) === "access").reduce((a, x) => a + admitsOf(x), 0) : ev?.sold ?? 0;
+  const pickupsDone = manifest ? manifest.tickets.filter((x) => x.state === "scanned" && roleOf(x) === "service").length : 0;
+  const pickupsAll = manifest ? manifest.tickets.filter((x) => x.state !== "reserved" && roleOf(x) === "service").length : 0;
 
   return (
     <>
@@ -183,7 +186,7 @@ export default function DoorScanner() {
         {user && (
           <>
             <div className="kpis" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
-              <div className="kpi"><b className="num">{scannedNow}</b><span>{t("checkedInK")}</span></div>
+              <div className="kpi"><b className="num">{scannedNow}</b><span>{t("checkedInK")}{pickupsAll ? ` · ${pickupsDone}/${pickupsAll} ${t("pickups")}` : ""}</span></div>
               <div className="kpi"><b className="num">{Math.max(0, soldNow - scannedNow)}</b><span>{t("expected")}</span></div>
               <div className="kpi" style={dupes ? { borderColor: "var(--red)" } : undefined}><b className="num" style={dupes ? { color: "var(--red-dark)" } : undefined}>{dupes}</b><span>{t("duplicates")}</span></div>
             </div>
@@ -195,7 +198,8 @@ export default function DoorScanner() {
             </div>
             {result && (
               <div className={`result ${tone}`} role="status" aria-live="assertive">
-                {t(result.result === "valid" ? "valid" : result.result === "duplicate" ? "dup" : result.result === "reserved" ? "payFirst" : result.result === "expired" ? "expiredK" : result.result === "locked" ? "locked" : "invalid")}
+                {t(result.result === "valid" ? "valid" : result.result === "service" ? "serviceK" : result.result === "entry_first" ? "entryFirstK" : result.result === "duplicate" ? "dup" : result.result === "reserved" ? "payFirst" : result.result === "expired" ? (result.reason === "used" ? "usedK" : "expiredK") : result.result === "locked" ? "locked" : "invalid")}
+                {result.result === "valid" && Number(result.admits ?? 1) > 1 ? ` · ${result.admits} ${t("people")}` : ""}
                 {result.addons?.length ? result.addons.map((a) => <span key={a.id} className="tag" style={{ marginInlineStart: 8, background: "#fff", color: "#000", verticalAlign: "middle" }}>⚡ {a.name}{a.qty > 1 ? ` ×${a.qty}` : ""}</span>) : null}
                 {result.kind ? ` · ${t(result.kind)}` : ""}{result.repeat ? ` · ${t("member")}` : ""}{result.offline ? ` · ${t("offlineK")}` : ""}
                 <small>
@@ -205,6 +209,7 @@ export default function DoorScanner() {
                   {result.seat ? ` · ${result.seat}` : ""}
                   {result.deposit ? ` · ${t("deposit")} $${result.deposit}${result.party ? ` · ${result.party} ${t("seats")}` : ""}` : ""}
                   {result.result === "duplicate" && result.attempts ? ` · ${result.attempts}× ` : ""}{result.locked ? ` · ${t("locked")}` : ""}
+                  {result.result === "service" ? ` · ${t("serviceNote")}${result.note ? ` · ${result.note}` : ""}` : result.result === "entry_first" ? ` · ${t("entryFirstNote")}` : result.reason === "used" ? ` · ${t("usedNote")}` : ""}
                 </small>
                 {result.result === "reserved" && result.order_id && <button className="btn sm" style={{ marginTop: 8, background: "#fff", color: "#000" }} onClick={() => collect(result.order_id!)}>{t("markPaid")}</button>}
               </div>
@@ -229,7 +234,7 @@ export default function DoorScanner() {
               <div className="card pad">
                 {found.map((f: any) => (
                   <div key={f.id} className="orow">
-                    <div><b>{f.holder ?? "—"}</b><small>{f.code} · {f.tier ?? f.kind} · {t(f.state === "scanned" ? "checkedIn" : f.state === "reserved" ? "payAtDoor" : f.state)}</small></div>
+                    <div><b>{f.holder ?? "—"}</b><small>{f.code} · {f.tier ?? f.kind}{roleOf(f) === "service" ? ` · ${t("roleService")}` : Number(f.admits ?? 1) > 1 ? ` · ${t("admits")} ${f.admits}` : ""} · {t(f.state === "scanned" ? "checkedIn" : f.state === "reserved" ? "payAtDoor" : f.state)}</small></div>
                     {f.token && f.state === "valid" && <button className="btn xs green" onClick={() => { check(f.token); setFound([]); setQ(""); }}>{t("checkIn")}</button>}
                   </div>
                 ))}
