@@ -19,8 +19,10 @@ To finish: delete the two `-legacy` projects in the dashboard (Settings → Gene
 
 1. `supabase db push` (or paste `supabase/migrations/*.sql` in order into the SQL editor).
 2. `sh supabase/sync-lib.sh && supabase functions deploy create-order pay payment-webhook scan wallet notify wa-otp-hook wa-inbound` (deploy `payment-webhook`, `notify` and `wa-inbound` with `--no-verify-jwt`: providers, pg_cron and Meta call them without a user session) and set secrets — the full list is at the bottom of `app/.env.example`. Minimum: `TICKET_SECRET`, `APP_URL`, `PAYMENTS_MODE=sandbox`, `NOTIFY_SECRET`.
-3. Auth → Hooks → *Send SMS*: point at `wa-otp-hook` and copy its secret to `SEND_SMS_HOOK_SECRET`. Enable phone sign-in to activate WhatsApp OTP; until then the login form falls back to email.
+3. Auth → Providers → Email (v0.9.1): buyers create an account with email and password in the app, and reset a forgotten password by email. Supabase's built-in mailer only delivers to members of the project's team, so for real customers either set custom SMTP (Auth → SMTP, e.g. Resend) or turn off *Confirm email*; and add the app hosts with `/**` to Auth → URL Configuration → Redirect URLs so confirmation and reset links come back to the app.
+   Auth → Hooks → *Send SMS*: point at `wa-otp-hook` and copy its secret to `SEND_SMS_HOOK_SECRET`. Enable phone sign-in to activate WhatsApp OTP; until then the login form falls back to email.
 4. Run `supabase/seed/demo.sql` then `supabase/seed/demo_v2.sql` (multi-vertical demo listings, deals, a promoter, venue stations), create the first admin user in Auth, and insert their `super_admin` membership (instructions at the bottom of the seed file).
+   Demo events are dated; when they have passed, `supabase/seed/refresh_demo_dates.sql` moves them forward by whole weeks (same weekday and local time). It is safe to re-run.
 
 5. Messaging: `insert into app_settings values ('notify_url','https://<ref>.supabase.co/functions/v1/notify'), ('notify_secret','<same as NOTIFY_SECRET>')` — pg_cron then drains `message_log` every five minutes. Without `WHATSAPP_TOKEN` the queue is rendered and marked `sandbox` (visible in the back office); with it, messages go out through the templates in `docs/WHATSAPP-TEMPLATES.md`.
 

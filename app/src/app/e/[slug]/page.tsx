@@ -8,7 +8,8 @@ import { sbServer } from "@/lib/supabase-server";
 import { fmtDate, fmtTime, railKey } from "@/lib/config";
 import { getLang, getT } from "@/lib/lang-server";
 import { getTenantConfig } from "@/lib/features-server";
-import { LIST_SELECT, fill, meterTone, meterWord, isFeatured, type Listing } from "@/lib/catalogue";
+import { LIST_SELECT, fill, meterTone, meterWord, isFeatured, isOver, type Listing } from "@/lib/catalogue";
+import BackLink from "@/components/BackLink";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,8 @@ export default async function ListingPage({ params, searchParams }: { params: { 
   const venue = pick(lang, l.venues, "name");
   const city = pick(lang, l.venues, "city");
   const desc = pick(lang, l, "description");
-  const p = fill(l);
+  const over = isOver(l);
+  const p = over ? null : fill(l);
   const when = l.kind === "event" ? `${fmtDate(l.starts_at, lang)}, ${fmtTime(l.starts_at, lang)}` : t(l.kind === "stay" ? "stayLine" : l.kind === "pass" ? "passLine" : "openDaily");
   const { data: stream } = features.radio && l.venues?.id ? await db.from("v_streams").select("slug,status,title").eq("venue_id", l.venues.id).order("status").limit(1).maybeSingle() : { data: null };
   const lat = l.venues?.lat, lng = l.venues?.lng;
@@ -44,7 +46,7 @@ export default async function ListingPage({ params, searchParams }: { params: { 
             <div className="sub">{when} · {venue}{l.credit ? <span style={{ opacity: 0.75 }}> · 📷 {l.credit.replace(/^Photo:\s*/i, "").split(" · ")[0]}</span> : null}</div>
           </div>
         </Photo>
-        <Link href="/" className="icon start" aria-label={t("back")} style={{ position: "absolute" }}>‹</Link>
+        <BackLink className="icon start" label={t("back")} style={{ position: "absolute" }} />
         <ListingActions id={l.id} slug={l.slug} title={l.title} line={`${when} · ${l.venues?.name ?? ""}`} />
       </div>
       <main>
@@ -68,7 +70,12 @@ export default async function ListingPage({ params, searchParams }: { params: { 
           </div>
         )}
         {lat && lng ? <MapCard lat={lat} lng={lng} address={pick(lang, l.venues, "address") || `${venue}, ${city}`} /> : null}
-        <OfferPicker listing={{ id: l.id, slug: l.slug, title, kind: l.kind, status: l.status, organiser: l.organisers?.name ?? "", organiserWa: (l.organisers as any)?.whatsapp ?? null }} tiers={[...l.tiers].sort((a, b) => a.sort - b.sort)} tables={(l.tables_vip ?? []).filter((x) => !x.reserved_by_order)} deals={l.deals ?? []} addons={features.addons ? (l.addon_options ?? []) : []} preset={searchParams?.tier ? { tier: searchParams.tier, qty: Math.min(20, Math.max(1, Number(searchParams.qty) || 1)), entry: searchParams.entry } : undefined} />
+        {over ? (
+          <div className="card sand pad stack" role="status">
+            <b style={{ fontSize: 15 }}>{t("ended")}</b>
+            <Link href="/" className="btn red">{t("whatsOn")}</Link>
+          </div>
+        ) : <OfferPicker listing={{ id: l.id, slug: l.slug, title, kind: l.kind, status: l.status, organiser: l.organisers?.name ?? "", organiserWa: (l.organisers as any)?.whatsapp ?? null }} tiers={[...l.tiers].sort((a, b) => a.sort - b.sort)} tables={(l.tables_vip ?? []).filter((x) => !x.reserved_by_order)} deals={l.deals ?? []} addons={features.addons ? (l.addon_options ?? []) : []} preset={searchParams?.tier ? { tier: searchParams.tier, qty: Math.min(20, Math.max(1, Number(searchParams.qty) || 1)), entry: searchParams.entry } : undefined} />}
       </main>
     </>
   );

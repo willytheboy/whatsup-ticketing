@@ -27,8 +27,11 @@ Deno.serve(async (req) => {
 
   const { data: tenant } = await db.from("tenants").select("*").eq("slug", b.tenant ?? "lb").single();
   if (!tenant) return json({ error: "tenant" }, 404);
-  const { data: ev } = await db.from("events").select("id,status,doors_at,starts_at,seated,tenant_id,kind,organiser_id,title,refund_policy,addon_options,venue_id,pass_venue_ids").eq("id", b.event_id).single();
+  const { data: ev } = await db.from("events").select("id,status,doors_at,starts_at,ends_at,seated,tenant_id,kind,organiser_id,title,refund_policy,addon_options,venue_id,pass_venue_ids").eq("id", b.event_id).single();
   if (!ev || ev.tenant_id !== tenant.id || !["live", "sold_out"].includes(ev.status)) return json({ error: "event_unavailable" }, 409);
+  // An event is over at its end time, or six hours after the start without one (the app's listing and wallet use the same rule):
+  // an old shared link must not sell tickets to a night that has already happened.
+  if (ev.kind === "event" && Date.now() > (ev.ends_at ? new Date(ev.ends_at).getTime() : new Date(ev.starts_at).getTime() + 6 * 3600e3)) return json({ error: "event_over" }, 409);
   const methods: string[] = [...tenant.payment_methods, "credit"];
   if (!methods.includes(b.payment_method)) return json({ error: "payment_method" }, 400);
 

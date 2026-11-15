@@ -26,6 +26,12 @@ export type Listing = {
 export const LIST_SELECT =
   "id,slug,title,title_ar,category,kind,starts_at,ends_at,doors_at,status,featured_until,cover_url,credit,deals,addon_options,pinned,pinned_ar,venues(id,name,name_ar,city,city_ar,address,address_ar,lat,lng),tiers(id,name,name_ar,face_price,capacity,sold,held,kind,member_free,plan_months,per_order_limit,note,sort,role,admits,requires_access,per),tables_vip(id,name,name_ar,seats,min_spend,deposit,reserved_by_order,includes_entry,packages)";
 
+/** An event is over when it ends, or six hours after it starts when it has no end time (the wallet and create-order use the same rule).
+    Venues, stays and passes run on their own sale dates. */
+export const eventEnd = (e: { starts_at: string; ends_at?: string | null }) => (e.ends_at ? new Date(e.ends_at).getTime() : new Date(e.starts_at).getTime() + 6 * 3600e3);
+export const isOver = (l: { kind: string; status?: string; starts_at: string; ends_at?: string | null }, now = Date.now()) =>
+  l.status === "ended" || (l.kind === "event" && eventEnd(l) < now);
+
 export const isFeatured = (l: Listing, now = new Date()) => !!l.featured_until && new Date(l.featured_until) > now;
 export const left = (x: Tier) => Math.max(0, x.capacity - x.sold - x.held);
 export const openTables = (l: Listing) => (l.tables_vip ?? []).filter((x) => !x.reserved_by_order);

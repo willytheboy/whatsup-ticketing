@@ -53,7 +53,7 @@ const D: Record<string, [string, string]> = {
   verify: ["Verify", "تأكيد"], email: ["Email", "الإيميل"], password: ["Password", "كلمة السر"], cont: ["Continue", "كمّل"],
   waOff: ["WhatsApp login isn't switched on yet — use email below.", "الدخول عبر واتساب مش مفعّل بعد — استعمل الإيميل."],
   signIn: ["Sign in", "سجّل دخول"], signOut: ["Sign out", "سجّل خروج"], signInTickets: ["Sign in to see your wallet.", "سجّل دخول لتشوف محفظتك."],
-  signInFirst: ["Sign in with WhatsApp to book.", "سجّل دخول بواتساب لتحجز."],
+  signInFirst: ["Sign in or create an account to book.", "سجّل دخول أو اعمل حساب لتحجز."],
   // wallet
   wallet: ["WALLET", "المحفظة"], noWallet: ["Nothing in your wallet yet. Your next night is one tap away.", "ما في شي بالمحفظة بعد. سهرتك الجاية على بعد كبسة."], browse: ["Browse", "تصفّح"],
   paid: ["Paid", "مدفوع"], booked: ["Booked", "محجوز"], member: ["Member", "عضو"], validUntil: ["Valid until", "صالح حتى"], planVisit: ["Plan a visit", "خطّط زيارة"],
@@ -276,6 +276,18 @@ const D: Record<string, [string, string]> = {
   roleK: ["Role", "الدور"], roleEntry: ["Entry", "دخول"], roleService: ["Service", "خدمة"], admitsK: ["Admits", "بيدخّل"], requiresEntry: ["Needs an entry", "بدها دخول"], perK: ["Per", "لكل"], personK: ["person", "شخص"],
   passVenues: ["Venues this pass covers", "الأماكن يلي بيغطيها الاشتراك"], accessOfferRequired: ["Add an entry offer (ticket, day pass, stay, membership or an entry-inclusive table) or mark the services \"no entry needed\".", "ضيف عرض دخول (تذكرة، دخول يومي، إقامة، اشتراك أو طاولة مع دخول) أو علّم الخدمات \"ما بدها دخول\"."],
   showWithEntry: ["Show with your entry", "فرجيه مع دخولك"],
+  // accounts (v0.9.1): create an account, reset a password
+  createAccount: ["Create an account", "اعمل حساب"], newHere: ["New here?", "جديد هون؟"], haveAccount: ["Have an account?", "عندك حساب؟"],
+  forgotPw: ["Forgot password?", "نسيت كلمة السر؟"], sendReset: ["Send reset link", "ابعت رابط التغيير"],
+  yourName: ["Your name (shown on your tickets)", "اسمك (بيطلع عالتذاكر)"], pwRule: ["At least 6 characters.", "٦ أحرف عالأقل."],
+  confirmSent: ["Almost done. Open the confirmation link we sent to", "قرّبنا. افتح رابط التأكيد يلي بعتناه على"],
+  resetSent: ["If there's an account, a reset link is on its way to", "إذا في حساب، رابط تغيير كلمة السر عم يوصل على"],
+  newPwHint: ["Choose a new password for your account.", "اختار كلمة سر جديدة لحسابك."], newPassword: ["New password", "كلمة سر جديدة"], savePw: ["Save password", "احفظ كلمة السر"],
+  badLogin: ["Wrong email or password.", "الإيميل أو كلمة السر غلط."], alreadyUser: ["There's already an account with this email. Sign in instead.", "في حساب بهالإيميل. سجّل دخول."],
+  confirmFirst: ["Confirm your email first: open the link we sent you.", "أكّد إيميلك أول: افتح الرابط يلي بعتناه."],
+  // discovery (v0.9.1): rail, search shortcuts, past listings
+  allRail: ["All", "الكل"], tomorrow: ["Tomorrow", "بكرا"], weekend: ["This weekend", "هالويكند"], under30: ["Under $30", "تحت ٣٠$"],
+  whatsOn: ["See what's on", "شوف شو في"],
 };
 
 export const t = (lang: Lang, key: string) => (D[key] ? D[key][lang === "ar" ? 1 : 0] : key);

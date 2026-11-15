@@ -23,6 +23,7 @@ const ERRORS: Record<string, string> = {
   table_unavailable: "That table was just taken.",
   unauthenticated: "Please sign in first.",
   event_unavailable: "This listing is not on sale right now.",
+  event_over: "This event has ended.",
 };
 
 /** Checkout: the cart from the listing, sign-in if needed, promo, payment method (cash is a peer of card), total all-in. */
@@ -182,7 +183,7 @@ export default function Checkout() {
         ) : (
           <>
             <div className="label">{t("account")}</div>
-            <LoginForm onDone={() => sb().auth.getUser().then(({ data }) => setUser(data.user))} />
+            <LoginForm returnTo={`/e/${cart.listing.slug}`} onDone={() => sb().auth.getUser().then(({ data }) => setUser(data.user))} />
           </>
         )}
       </main>

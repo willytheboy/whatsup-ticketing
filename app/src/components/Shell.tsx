@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useT } from "@/lib/lang";
@@ -22,6 +23,8 @@ const HIDE = ["/checkout", "/t/", "/login", "/story/", "/org/new", "/org/promote
 function Tabs() {
   const path = usePathname();
   const t = useT();
+  // count pages seen in this tab, so a back arrow knows whether there is an in-app page to return to (components/BackLink)
+  useEffect(() => { try { sessionStorage.setItem("wu-nav", String(Number(sessionStorage.getItem("wu-nav") ?? 0) + 1)); } catch {} }, [path]);
   const cfg = useConfig();
   if (HIDE.some((p) => path.startsWith(p))) return null;
   const on = (href: string) => (href === "/" ? path === "/" || path.startsWith("/e/") : path.startsWith(href));

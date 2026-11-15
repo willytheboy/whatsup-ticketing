@@ -61,7 +61,7 @@ export const signed = (n: number | string | null | undefined) => {
 /* ------------------------------------------------------------------ catalogue (brief §4.2)
    Home rail. Legacy event categories map onto the rail so nothing already published disappears. */
 export const RAIL: [string, string][] = [
-  ["all", "tonight"], ["Dining", "dining"], ["Beach", "beach"], ["Stay", "stay"], ["Events", "events"],
+  ["all", "allRail"], ["Dining", "dining"], ["Beach", "beach"], ["Stay", "stay"], ["Events", "events"],
   ["Music", "music"], ["Theatre", "theatre"], ["Sport", "sport"], ["Deals", "deals"], ["Passes", "passes"],
 ];
 export const CATEGORY_ALIASES: Record<string, string[]> = {

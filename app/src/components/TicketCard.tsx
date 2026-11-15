@@ -6,12 +6,13 @@ import { Facet } from "./Band";
 import { useToast } from "./Toast";
 import { useConfig } from "./Config";
 import { sb } from "@/lib/supabase-browser";
-import { fmtDate, fmtTime, money, lbp, type OfferKind } from "@/lib/config";
+import { fmtDate, fmtTime, money, lbp, TZ, type OfferKind } from "@/lib/config";
+import { eventEnd } from "@/lib/catalogue";
 import { useLang, useT, useCur } from "@/lib/lang";
 import { rotatingToken, secondsToNextSlot, icsFor, download, ticketImage } from "@/lib/wallet";
 
 export type WalletTicket = {
-  id: string; code: string; token: string; seat: string | null; state: string; created_at: string; valid_until: string | null; order_id: string | null; recipient?: { name?: string; phone?: string } | null;
+  id: string; code: string; token: string; seat: string | null; state: string; created_at: string; scanned_at?: string | null; valid_until: string | null; order_id: string | null; recipient?: { name?: string; phone?: string } | null;
   events: { id: string; slug: string; title: string; title_ar: string | null; starts_at: string; ends_at?: string | null; doors_at?: string | null; kind: string; refund_policy?: any; venues: { name: string; name_ar: string | null; city: string; city_ar: string | null } | null; organisers?: { whatsapp: string | null } | null } | null;
   tiers: { name: string; name_ar: string | null; kind: OfferKind; plan_months: number | null; note: string | null; face_price?: number; role?: "access" | "service"; admits?: number } | null;
   orders: { meta: any; total: number; payment_method: string | null; addons?: any[]; refund_status?: string | null } | null;
@@ -20,7 +21,15 @@ const pick = (lang: string, row: any, key: string) => (lang === "ar" && row?.[`$
 export const kindOf = (tk: WalletTicket): OfferKind => tk.tiers?.kind ?? (tk.seat && !tk.tiers ? "table" : "ticket");
 /** Access first (v6): an entry admits people; a service QR is a pickup shown together with the entry. */
 export const isService = (tk: WalletTicket) => (tk.tiers?.role ?? (kindOf(tk) === "item" ? "service" : "access")) === "service";
-export const isPast = (tk: WalletTicket) => { const e = tk.events; if (!e) return false; const end = e.kind === "event" ? new Date(e.starts_at).getTime() + 6 * 3600e3 : new Date(e.ends_at ?? e.starts_at).getTime() + 864e5; return end < Date.now(); };
+const beirutDay = (d: Date | string) => new Date(d).toLocaleDateString("en-CA", { timeZone: TZ });
+/** Past: the event is over (its end, or six hours after the start), the venue's season has closed, or a one-day offer
+    (day pass, item, table) was already used on an earlier day. */
+export const isPast = (tk: WalletTicket) => {
+  const e = tk.events; if (!e) return false;
+  if (e.kind === "event") return eventEnd(e) < Date.now();
+  if (tk.state === "scanned" && tk.scanned_at && ["daypass", "item", "table"].includes(kindOf(tk)) && beirutDay(tk.scanned_at) < beirutDay(new Date())) return true;
+  return new Date(e.ends_at ?? e.starts_at).getTime() + 864e5 < Date.now();
+};
 
 function shareText(tk: WalletTicket, lang: string) {
   const e = tk.events;

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
@@ -124,6 +124,16 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
   const tableReady = !!table && (!table.seats || !!party) && !!time;
   const serviceWithoutEntry = !inside && (lines.some((l) => { const x = tiers.find((y) => y.id === l.tier_id); return x && !isAccess(x) && needsEntry(x); }) || (tableReady && !tableEntry));
   const canBook = (lines.length > 0 || tableReady) && !serviceWithoutEntry;
+  // Sticky total (as on the big ticketing apps): once something is picked, the total and a way to the payment buttons stay in view.
+  const payRef = useRef<HTMLDivElement>(null);
+  const [payInView, setPayInView] = useState(false);
+  useEffect(() => {
+    const el = payRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setPayInView(e.isIntersecting), { rootMargin: "0px 0px -80px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [canBook]);
   const giftable = features.gifts && lines.some((l) => ["ticket", "daypass", "item"].includes(l.kind));
 
   const bump = (x: Tier, d: number) => {
@@ -338,8 +348,17 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
       )}
 
       {serviceWithoutEntry && <p className="small" style={{ margin: "12px 0 0", color: "var(--red-dark)" }}>{t("entryFirstHint")}</p>}
+      {canBook && !payInView && (
+        <div className="paybar">
+          <div style={{ minWidth: 0 }}>
+            <div className="small">{t("total")}</div>
+            <b className="num" style={{ fontSize: 17 }}>{money(total)}</b>{total ? <span className="small"> {t("allIn")}</span> : null}
+          </div>
+          <button className="btn red sm" onClick={() => payRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>{t("cont")}</button>
+        </div>
+      )}
       {canBook && (
-        <>
+        <div ref={payRef}>
           <p className="small" style={{ margin: "12px 0 10px" }}>
             {t("total")} {money(total)}{total && cur === "LBP" ? ` ≈ ${lbp(total)}` : ""}{total ? ` ${t("allIn")}` : ""}. {t("feesNote")}{ref ? <span style={{ color: "var(--g1)" }}> {t("refApplied")} {ref}.</span> : null}
           </p>
@@ -355,7 +374,7 @@ export default function OfferPicker({ listing, tiers, tables: tablesIn, deals: d
             )}
           </div>
           {!user && <p className="small" style={{ textAlign: "center", margin: "8px 0 0" }}>{t("signInFirst")} <Link href={`/login?next=/e/${listing.slug}`} style={{ color: "var(--g1)", fontWeight: 600 }}>{t("signIn")}</Link></p>}
-        </>
+        </div>
       )}
     </div>
   );
