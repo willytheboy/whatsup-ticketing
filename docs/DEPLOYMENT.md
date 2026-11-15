@@ -2,14 +2,18 @@
 
 ## Vercel (git-linked)
 
-| Project | Root directory | Production URL | Notes |
+| Project | Root directory | Hostnames | Notes |
 | --- | --- | --- | --- |
-| `whatsup-ticketing-app` | `app` | https://whatsup-ticketing-app.vercel.app | consumer + organiser + `/admin` (git-linked, project `prj_hMSiQzhwDnqaouNI28lNttxUk4M1`) |
-| `whatsup-backoffice-app` | `app` | https://whatsup-backoffice-app.vercel.app | `/` → `/admin` via middleware (hostname match; git-linked, project `prj_6YWt2L2EgnaEtfR0f78CIun1q3bh`) |
+| `whatsup-ticketing` | `app` | https://whatsup-ticketing-app.vercel.app (domain record) · https://whatsup-ticketing.vercel.app (alias) | consumer + organiser + `/admin` (git-linked, project `prj_hMSiQzhwDnqaouNI28lNttxUk4M1`) |
+| `whatsup-backoffice` | `app` | https://whatsup-backoffice-app.vercel.app (domain record) · https://whatsup-backoffice.vercel.app (alias) | `/` → `/admin` via middleware (hostname match; git-linked, project `prj_6YWt2L2EgnaEtfR0f78CIun1q3bh`) |
 
 Pushes to `main` on `willytheboy/whatsup-ticketing` deploy both projects.
 
-The older manually-deployed projects `whatsup-ticketing` (prj_IhThFJSqR8Ny1r2CFlZCSnrL6fn8) and `whatsup-backoffice` (prj_oVIlFrwPCwvHGgBAMQiiDHNNT2UO) are not git-linked and still hold the short names (`whatsup-backoffice.vercel.app` currently serves a redirect to the `-app` host); delete them in the Vercel dashboard and rename the `-app` projects to reclaim `whatsup-ticketing.vercel.app` / `whatsup-backoffice.vercel.app` (the hostname check in `src/middleware.ts` already covers both names). `app/vercel.json` pins `framework: nextjs` so a fresh project builds correctly even before Vercel has auto-detected the framework. No environment variables are required for a green build; set them to override the defaults in `app/.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_TENANT`, `NEXT_PUBLIC_APP_ROLE`, `NEXT_PUBLIC_BACKOFFICE_URL`, `NEXT_PUBLIC_APP_URL` — the last one is what the back office's "Preview in the app" links open). Add **`ANTHROPIC_API_KEY`** (and optionally `ANTHROPIC_MODEL`) to the ticketing project to switch the concierge, vibe creator and poster-to-listing from catalogue rules to Claude.
+**Short names (15 Nov 2026).** The git-linked projects were renamed from `whatsup-ticketing-app` / `whatsup-backoffice-app` to the short names. The older manually-deployed projects are now `whatsup-ticketing-legacy` (`prj_IhThFJSqR8Ny1r2CFlZCSnrL6fn8`) and `whatsup-backoffice-legacy` (`prj_oVIlFrwPCwvHGgBAMQiiDHNNT2UO`). Renaming a Vercel project does not move its `<name>.vercel.app` domain, so the legacy projects still own the domain records `whatsup-ticketing.vercel.app` and `whatsup-backoffice.vercel.app`, and Vercel refuses to add them to another project (`409 duplicate-team-registration`). Until then both short hosts are aliases set by hand on the current production deployments: they serve the live app but **do not follow new pushes**. After a code push, re-point them (dashboard → deployment → Assign domain, or `assign_alias` with the new production deployment id).
+
+To finish: delete the two `-legacy` projects in the dashboard (Settings → General → Delete Project), then add `whatsup-ticketing.vercel.app` and `whatsup-backoffice.vercel.app` as domains of the git-linked projects (Settings → Domains, or `add_project_domain`). From then on every push updates the short hosts. The `-app` hosts stay attached and keep working, so they remain the code defaults (`NEXT_PUBLIC_BACKOFFICE_URL`, `NEXT_PUBLIC_APP_URL`, the functions' `APP_URL`); the hostname check in `src/middleware.ts` already covers both names.
+
+`app/vercel.json` pins `framework: nextjs` so a fresh project builds correctly even before Vercel has auto-detected the framework. No environment variables are required for a green build; set them to override the defaults in `app/.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_TENANT`, `NEXT_PUBLIC_APP_ROLE`, `NEXT_PUBLIC_BACKOFFICE_URL`, `NEXT_PUBLIC_APP_URL` — the last one is what the back office's "Preview in the app" links open). Add **`ANTHROPIC_API_KEY`** (and optionally `ANTHROPIC_MODEL`) to the ticketing project to switch the concierge, vibe creator and poster-to-listing from catalogue rules to Claude.
 
 ## Supabase
 
